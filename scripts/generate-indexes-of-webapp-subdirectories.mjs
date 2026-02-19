@@ -7,7 +7,7 @@ const WEBAPPS_DIRNAME = "webapps";
 const webappsDir = path.join(ROOT, WEBAPPS_DIRNAME);
 
 function escHtml(s) {
-  return s
+  return String(s)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -39,8 +39,9 @@ async function listHtmlFilesInDir(dirAbs) {
     .sort((a, b) => a.localeCompare(b, "en"));
 }
 
-function pageShell({ title, nowIso, bodyHtml, backLinksHtml }) {
-  return `<!doctype html>
+function pageShell(title, nowIso, bodyHtml, backLinksHtml) {
+  return (
+`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -68,12 +69,18 @@ ${bodyHtml}
 ${backLinksHtml}
 </body>
 </html>
-`;
+`
+  );
 }
 
 async function writeFileEnsuringDir(fileAbs, content) {
   await fs.mkdir(path.dirname(fileAbs), { recursive: true });
   await fs.writeFile(fileAbs, content, "utf8");
+}
+
+function ulFromItems(itemsHtml) {
+  if (!itemsHtml.length) return "";
+  return "<ul>\n" + itemsHtml.join("\n") + "\n  </ul>";
 }
 
 async function generateIndexForWebappSubdir(subdirName) {
@@ -82,82 +89,76 @@ async function generateIndexForWebappSubdir(subdirName) {
 
   const htmlFiles = await listHtmlFilesInDir(dirAbs);
   const nowIso = new Date().toISOString();
-  const title = `${WEBAPPS_DIRNAME}/${subdirName}/`;
+  const title = WEBAPPS_DIRNAME + "/" + subdirName + "/";
 
-  const listHtml = htmlFiles.length
-    ? `<ul>
-${htmlFiles
-  .map(
-    (f) =>
-      `    <li><a href="./${encodeURIComponent(f)}">${escHtml(f)}</a></li>`
-  )
-  .join("\n")}
-  </ul>`
-    : `<p class="empty">No HTML files found in <code>${escHtml(
-        `${WEBAPPS_DIRNAME}/${subdirName}/`
-      )}</code> (other than <code>index.html</code>).</p>`;
+  let bodyHtml = "";
+  if (htmlFiles.length) {
+    const items = htmlFiles.map((f) => {
+      const href = "./" + encodeURIComponent(f);
+      return "    <li><a href=\"" + href + "\">" + escHtml(f) + "</a></li>";
+    });
+    bodyHtml = "  " + ulFromItems(items);
+  } else {
+    bodyHtml =
+      "  <p class=\"empty\">No HTML files found in <code>" +
+      escHtml(WEBAPPS_DIRNAME + "/" + subdirName + "/") +
+      "</code> (other than <code>index.html</code>).</p>";
+  }
 
-  const backLinksHtml = `  <p class="toplink"><a href="../">← Back to ${WEBAPPS_DIRNAME}/</a></p>
-  <p class="toplink"><a href="../../">← Back to site root</a></p>`;
+  const backLinksHtml =
+    "  <p class=\"toplink\"><a href=\"../\">← Back to " + escHtml(WEBAPPS_DIRNAME) + "/</a></p>\n" +
+    "  <p class=\"toplink\"><a href=\"../../\">← Back to site root</a></p>";
 
-  const html = pageShell({
-    title,
-    nowIso,
-    bodyHtml: `  ${listHtml}`,
-    backLinksHtml,
-  });
+  const html = pageShell(title, nowIso, bodyHtml, backLinksHtml);
 
   await writeFileEnsuringDir(outFile, html);
   console.log(
-    `Wrote ${path.relative(ROOT, outFile)} with ${htmlFiles.length} links.`
+    "Wrote " + path.relative(ROOT, outFile) + " with " + htmlFiles.length + " links."
   );
 }
 
 async function generateWebappsIndex(subdirs) {
   const outFile = path.join(webappsDir, "index.html");
   const nowIso = new Date().toISOString();
-  const title = `${WEBAPPS_DIRNAME}/`;
+  const title = WEBAPPS_DIRNAME + "/";
 
-  const listHtml = subdirs.length
-    ? `<ul>
-${subdirs
-  .map(
-    (d) =>
-      `    <li><a href="./${encodeURIComponent(d)}/">${escHtml(d)}/</a></li>`
-  )
-  .join("\n")}
-  </ul>`
-    : `<p class="empty">No subdirectories found in <code>${WEBAPPS_DIRNAME}/</code>.</p>`;
+  let bodyHtml = "";
+  if (subdirs.length) {
+    const items = subdirs.map((d) => {
+      const href = "./" + encodeURIComponent(d) + "/";
+      return "    <li><a href=\"" + href + "\">" + escHtml(d) + "/</a></li>";
+    });
+    bodyHtml = "  " + ulFromItems(items);
+  } else {
+    bodyHtml =
+      "  <p class=\"empty\">No subdirectories found in <code>" +
+      escHtml(WEBAPPS_DIRNAME + "/") +
+      "</code>.</p>";
+  }
 
-  const backLinksHtml = `  <p class="toplink"><a href="../">← Back to site root</a></p>`;
+  const backLinksHtml =
+    "  <p class=\"toplink\"><a href=\"../\">← Back to site root</a></p>";
 
-  const html = pageShell({
-    title,
-    nowIso,
-    bodyHtml: `  ${listHtml}`,
-    backLinksHtml,
-  });
+  const html = pageShell(title, nowIso, bodyHtml, backLinksHtml);
 
   await writeFileEnsuringDir(outFile, html);
   console.log(
-    `Wrote ${path.relative(ROOT, outFile)} with ${subdirs.length} links.`
+    "Wrote " + path.relative(ROOT, outFile) + " with " + subdirs.length + " links."
   );
 }
 
 async function main() {
   if (!(await isDirectory(webappsDir))) {
-    console.error(`Missing directory: ${webappsDir}`);
+    console.error("Missing directory: " + webappsDir);
     process.exit(1);
   }
 
   const subdirs = await listImmediateSubdirs(webappsDir);
 
-  // Generate each webapps/<subdir>/index.html
   for (const subdir of subdirs) {
     await generateIndexForWebappSubdir(subdir);
   }
 
-  // Generate webapps/index.html linking to each subdir
   await generateWebappsIndex(subdirs);
 }
 
