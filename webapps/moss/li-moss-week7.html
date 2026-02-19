@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life in the Boundary Layer - Sonification</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a2a1a;
+            color: #d4e4d4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            background: #2d3e2d;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            max-width: 500px;
+        }
+        h1 { color: #8fbc8f; margin-bottom: 0.5rem; }
+        p { font-style: italic; font-size: 0.9rem; margin-bottom: 2rem; }
+        button {
+            background-color: #4f7942;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover { background-color: #6a9955; }
+        button:disabled { background-color: #3e4d3e; cursor: not-allowed; }
+        .controls { margin-top: 20px; display: none; }
+        .label { font-size: 0.8rem; margin-top: 10px; color: #a9baab; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Gathering Moss</h1>
+    <p>"The Advantages of Being Small: Life in the Boundary Layer"</p>
+    
+    <button id="startBtn">Enter the Boundary Layer</button>
+
+    <div id="ui" class="controls">
+        <div class="label">Simulating: Still Air & CO2 Saturation</div>
+        <input type="range" id="layerDepth" min="0" max="100" value="50">
+        <div class="label">Moss Height (Seta Extension)</div>
+    </div>
+</div>
+
+<script>
+    let audioCtx;
+    let mainGain, reverbNode;
+
+    async function setupAudio() {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // --- REVERB SETUP (Stereo Reverb) ---
+        const duration = 3;
+        const decay = 2;
+        const sampleRate = audioCtx.sampleRate;
+        const length = sampleRate * duration;
+        const impulse = audioCtx.createBuffer(2, length, sampleRate);
+        for (let i = 0; i < 2; i++) {
+            const channel = impulse.getChannelData(i);
+            for (let j = 0; j < length; j++) {
+                channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / length, decay);
+            }
+        }
+        reverbNode = audioCtx.createConvolver();
+        reverbNode.buffer = impulse;
+
+        mainGain = audioCtx.createGain();
+        mainGain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        
+        mainGain.connect(reverbNode);
+        reverbNode.connect(audioCtx.destination);
+        mainGain.connect(audioCtx.destination); // Mix wet/dry
+    }
+
+    function createVocalSynth(freq, panValue) {
+        // FM Synthesis for "Vocal" quality
+        const carrier = audioCtx.createOscillator();
+        const modulator = audioCtx.createOscillator();
+        const modGain = audioCtx.createGain();
+        const pan = audioCtx.createStereoPanner();
+        const vca = audioCtx.createGain();
+
+        carrier.type = 'sine';
+        modulator.type = 'sawtooth';
+
+        carrier.frequency.value = freq;
+        modulator.frequency.value = freq * 1.5;
+        modGain.gain.value = freq * 0.8;
+
+        pan.pan.value = panValue;
+        vca.gain.value = 0;
+
+        modulator.connect(modGain);
+        modGain.connect(carrier.frequency);
+        carrier.connect(vca);
+        vca.connect(pan);
+        pan.connect(mainGain);
+
+        carrier.start();
+        modulator.start();
+
+        return { carrier, modulator, vca, modGain };
+    }
+
+    function playSporeBurst() {
+        // Sonifying the "long setae, stalks that poke up above the boundary layer" [cite: 160]
+        const { carrier, vca } = createVocalSynth(200 + Math.random() * 400, (Math.random() * 2) - 1);
+        const now = audioCtx.currentTime;
+        
+        vca.gain.linearRampToValueAtTime(0.1, now + 0.1);
+        carrier.frequency.exponentialRampToValueAtTime(1200, now + 2);
+        vca.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
+        
+        setTimeout(() => {
+            carrier.stop();
+        }, 3000);
+    }
+
+    function createAtmosphere() {
+        // The "Boundary Layer": Still, slow air flow [cite: 70]
+        const noise = audioCtx.createBufferSource();
+        const bufferSize = audioCtx.sampleRate * 2;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        
+        noise.buffer = buffer;
+        noise.loop = true;
+
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 400; // Muffled, "dead space" feel [cite: 99]
+
+        const noiseGain = audioCtx.createGain();
+        noiseGain.gain.value = 0.05;
+
+        noise.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(mainGain);
+        noise.start();
+    }
+
+    document.getElementById('startBtn').addEventListener('click', async () => {
+        if (!audioCtx) {
+            await setupAudio();
+            createAtmosphere();
+            document.getElementById('ui').style.display = 'block';
+            document.getElementById('startBtn').innerText = "Inhabiting the Layer...";
+            document.getElementById('startBtn').disabled = true;
+
+            // Continuous "Microcommunity" hum
+            setInterval(() => {
+                const f = 110 * Math.pow(2, Math.floor(Math.random() * 12) / 12);
+                const p = (Math.random() * 1.6) - 0.8;
+                const synth = createVocalSynth(f, p);
+                const now = audioCtx.currentTime;
+                synth.vca.gain.linearRampToValueAtTime(0.05, now + 1);
+                synth.vca.gain.linearRampToValueAtTime(0, now + 4);
+            }, 2000);
+
+            // Occasional Spore/Seta launches [cite: 161]
+            setInterval(playSporeBurst, 5000);
+        }
+    });
+</script>
+
+</body>
+</html>
