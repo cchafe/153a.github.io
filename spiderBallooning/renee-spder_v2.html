@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Spider Ballooning Sonifier </title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: #0b0f14; color: #e8eef6;
+      display: grid; place-items: center; min-height: 100vh;
+    }
+    .card {
+      width: min(900px, 92vw); background: #121824; border: 1px solid #263148;
+      border-radius: 16px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+    h1 { font-size: 18px; margin: 0 0 14px; font-weight: 650; }
+    p { margin: 8px 0 16px; color: #b8c3d6; line-height: 1.35; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .control {
+      background: #0e1420; border: 1px solid #24304a; border-radius: 12px; padding: 14px;
+    }
+    label { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+    .value { color: #d7e1f5; font-variant-numeric: tabular-nums; }
+    input[type="range"] { width: 100%; margin-top: 10px; }
+    .buttons { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+    button {
+      border: 1px solid #2b3856; background: #172038; color: #e8eef6;
+      padding: 10px 12px; border-radius: 10px; cursor: pointer; font-weight: 600;
+    }
+    button:active { transform: translateY(1px); }
+    button.primary { background: #243a74; border-color: #3454a6; }
+    .status { margin-top: 10px; color: #aab7ce; font-size: 13px; }
+    canvas { width: 100%; height: 140px; background: #070a10; border-radius: 12px; border: 1px solid #202a3f; }
+    .footer { margin-top: 10px; font-size: 12px; color: #9fb0cc; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🕷️ Spider Ballooning Sonifier — stereo</h1>
+    <p>
+      Events are “acid chirps” (sawtooth + resonant lowpass sweep) + a tight noise “tick”.
+      Rate controls event density; Loudness controls master gain.
+    </p>
+
+    <div class="row">
+      <div class="control">
+        <label>
+          <span>Rate (events / sec)</span>
+          <span class="value mono" id="rateVal">1.20</span>
+        </label>
+        <input id="rate" type="range" min="0" max="12" step="0.05" value="1.20" />
+        <div class="footer">Poisson timing + occasional gust clusters</div>
+      </div>
+
+      <div class="control">
+        <label>
+          <span>Loudness</span>
+          <span class="value mono" id="gainVal">0.20</span>
+        </label>
+        <input id="gain" type="range" min="0" max="1" step="0.01" value="0.20" />
+        <div class="footer">Master gain (there’s a limiter, but be gentle)</div>
+      </div>
+    </div>
+
+    <div class="control" style="margin-top:14px;">
+      <canvas id="scope" width="1200" height="220"></canvas>
+      <div class="buttons">
+        <button class="primary" id="start">Start Audio</button>
+        <button id="stop">Stop</button>
+        <button id="burst">Single Takeoff</button>
+      </div>
+      <div class="status" id="status">Status: idle</div>
+    </div>
+
+    <div class="footer">
+      Stereo: event panning + slight Haas delay. Punch: short amp envelopes + transient click.
+      Acid: sawtooth into resonant lowpass sweep with drive.
+    </div>
+  </div>
+
+<script>
+(() => {
+  // --- UI ---
+  const rateEl = document.getElementById('rate');
+  const gainEl = document.getElementById('gain');
+  const rateVal = document.getElementById('rateVal');
+  const gainVal = document.getElementById('gainVal');
+  const statusEl = document.getElementById('status');
+
+  const startBtn = document.getElementById('start');
+  const stopBtn  = document.getElementById('stop');
+  const burstBtn = document.getElementById('burst');
+
+  const canvas = document.getElementById('scope');
+  const ctx2d = canvas.getContext('2d');
+
+  function setText() {
+    rateVal.textContent = (+rateEl.value).toFixed(2);
+    gainVal.textContent = (+gainEl.value).toFixed(2);
+  }
+  rateEl.addEventListener('input', setText);
+  gainEl.addEventListener('input', setText);
+  setText();
+
+  // --- Audio Graph State ---
+  let ac = null;
+  let master = null;
+  let analyser = null;
+
+  // stereo wideners
+  let splitter = null;
+  let merger = null;
+  let haasDelayL = null;
+  let haasDelayR = null;
+
+  let running = false;
+  let nextEventTime = 0;
+  let scheduleTimer = null;
+  let noiseBuffer = null;
+
+  function ensureAudio() {
+    if (ac) return;
+
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Master + safety shaping
+    master = ac.createGain();
+    master.gain.value = +gainEl.value;
+
+    const shaper = ac.createWaveShaper();
+    shaper.curve = makeSoftClipCurve(0.7); // a bit more drive than before
+    shaper.oversample = '4x';
+
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 2048;
+
+    // Haas stereo: split L/R, delay one side by a few ms
+    splitter = ac.createChannelSplitter(2);
+    merger = ac.createChannelMerger(2);
+    haasDelayL = ac.createDelay(0.02);
+    haasDelayR = ac.createDelay(0.02);
+    haasDelayL.delayTime.value = 0.000; // keep L dry
+    haasDelayR.delayTime.value = 0.010; // 10ms on R for width
+
+    // Route: master -> split -> (L dry, R delayed) -> merge -> shaper -> analyser -> out
+    master.connect(splitter);
+    splitter.connect(haasDelayL, 0);
+    splitter.connect(haasDelayR, 1);
+    haasDelayL.connect(merger, 0, 0);
+    haasDelayR.connect(merger, 0, 1);
+
+    merger.connect(shaper);
+    shaper.connect(analyser);
+    analyser.connect(ac.destination);
+
+    // Precompute white noise buffer (1s)
+    noiseBuffer = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+
+    // live master gain
+    gainEl.addEventListener('input', () => {
+      const t = ac.currentTime;
+      master.gain.setTargetAtTime(+gainEl.value, t, 0.02);
+    });
+  }
+
+  function makeSoftClipCurve(amount) {
+    const n = 65536;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / (n - 1) - 1;
+      // tanh soft clip; smaller amount => harder
+      curve[i] = Math.tanh(x / Math.max(1e-6, amount));
+    }
+    return curve;
+  }
+
+  function randRange(a, b) { return a + Math.random() * (b - a); }
+  function clamp(x, a, b) { return Math.min(b, Math.max(a, x)); }
+
+  // --- Punchy/Acid Takeoff Event ---
+  function triggerTakeoff(when = ac.currentTime) {
+    // Core "acid" voice: saw oscillator -> resonant lowpass -> env
+    const osc = ac.createOscillator();
+    osc.type = 'sawtooth';
+
+    // Optional sub click via noise tick
+    const tickSrc = ac.createBufferSource();
+    tickSrc.buffer = noiseBuffer;
+
+    // Filters
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = randRange(9, 18); // resonant = acid
+
+    const hpTick = ac.createBiquadFilter();
+    hpTick.type = 'highpass';
+    hpTick.frequency.value = randRange(2500, 5000); // clicky highs
+
+    // Envelopes
+    const env = ac.createGain();
+    env.gain.value = 0;
+
+    const tickEnv = ac.createGain();
+    tickEnv.gain.value = 0;
+
+    // Per-event panning (true stereo movement)
+    const pan = ac.createStereoPanner();
+
+    // Event randomization
+    const dur = randRange(0.08, 0.22);             // punchy short
+    const baseHz = randRange(160, 520);            // "note"
+    const chirp = randRange(1.2, 2.2);             // pitch up ratio
+    const amp = randRange(0.10, 0.28);             // per-event amplitude (pre-master)
+    const panPos = randRange(-1, 1);
+
+    // Pitch envelope: quick chirp up then settle
+    osc.frequency.setValueAtTime(baseHz, when);
+    osc.frequency.exponentialRampToValueAtTime(baseHz * chirp, when + 0.02);
+    osc.frequency.exponentialRampToValueAtTime(baseHz * randRange(0.9, 1.1), when + dur);
+
+    // Filter sweep: start bright, sweep down to add "acid pluck"
+    const fStart = randRange(1800, 5200);
+    const fEnd = randRange(600, 1600);
+    lp.frequency.setValueAtTime(fStart, when);
+    lp.frequency.exponentialRampToValueAtTime(fEnd, when + dur);
+
+    // Punch envelope: fast attack, medium decay, no sustain
+    env.gain.setValueAtTime(0.0001, when);
+    env.gain.exponentialRampToValueAtTime(amp, when + 0.004);
+    env.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+
+    // Tick envelope: very short transient
+    const tickAmp = amp * randRange(0.25, 0.6);
+    tickEnv.gain.setValueAtTime(0.0001, when);
+    tickEnv.gain.exponentialRampToValueAtTime(tickAmp, when + 0.0015);
+    tickEnv.gain.exponentialRampToValueAtTime(0.0001, when + 0.015);
+
+    // Stereo motion: small "throw" over the event
+    pan.pan.setValueAtTime(panPos, when);
+    pan.pan.linearRampToValueAtTime(clamp(panPos + randRange(-0.35, 0.35), -1, 1), when + dur);
+
+    // Extra bite: mild pre-drive via waveshaper per-voice
+    const voiceDrive = ac.createWaveShaper();
+    voiceDrive.curve = makeSoftClipCurve(randRange(0.45, 0.65));
+    voiceDrive.oversample = '2x';
+
+    // Connect acid voice
+    osc.connect(lp);
+    lp.connect(voiceDrive);
+    voiceDrive.connect(env);
+
+    // Connect tick
+    tickSrc.connect(hpTick);
+    hpTick.connect(tickEnv);
+
+    // Mix voice + tick into pan -> master
+    const mix = ac.createGain();
+    mix.gain.value = 1;
+    env.connect(mix);
+    tickEnv.connect(mix);
+    mix.connect(pan);
+    pan.connect(master);
+
+    // Start/stop
+    osc.start(when);
+    osc.stop(when + dur + 0.03);
+
+    tickSrc.start(when);
+    tickSrc.stop(when + 0.03);
+  }
+
+  // --- Scheduler (Poisson + gust clusters) ---
+  function startScheduler() {
+    if (scheduleTimer) return;
+
+    const lookahead = 0.25;
+    const tickMs = 35;
+
+    nextEventTime = ac.currentTime;
+
+    scheduleTimer = setInterval(() => {
+      if (!running) return;
+
+      const rate = +rateEl.value;
+      const now = ac.currentTime;
+
+      if (rate <= 0) {
+        nextEventTime = now;
+        return;
+      }
+
+      while (nextEventTime < now + lookahead) {
+        const u = Math.max(1e-6, Math.random());
+        const dt = -Math.log(u) / rate;
+        nextEventTime += dt;
+
+        // Gust clusters: quick flurries
+        const gust = Math.random() < 0.18;
+        if (gust) {
+          triggerTakeoff(nextEventTime);
+          triggerTakeoff(nextEventTime + randRange(0.015, 0.06));
+          if (Math.random() < 0.35) triggerTakeoff(nextEventTime + randRange(0.06, 0.11));
+        } else {
+          triggerTakeoff(nextEventTime);
+        }
+      }
+    }, tickMs);
+  }
+
+  function stopScheduler() {
+    if (scheduleTimer) clearInterval(scheduleTimer);
+    scheduleTimer = null;
+  }
+
+  // --- Oscilloscope ---
+  let rafId = null;
+  function drawScope() {
+    if (!analyser) return;
+
+    const buf = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(buf);
+
+    ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+    ctx2d.fillStyle = '#070a10';
+    ctx2d.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Grid
+    ctx2d.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx2d.lineWidth = 1;
+    for (let x = 0; x <= 10; x++) {
+      const xx = (x / 10) * canvas.width;
+      ctx2d.beginPath(); ctx2d.moveTo(xx, 0); ctx2d.lineTo(xx, canvas.height); ctx2d.stroke();
+    }
+    for (let y = 0; y <= 4; y++) {
+      const yy = (y / 4) * canvas.height;
+      ctx2d.beginPath(); ctx2d.moveTo(0, yy); ctx2d.lineTo(canvas.width, yy); ctx2d.stroke();
+    }
+
+    // Waveform
+    ctx2d.strokeStyle = 'rgba(232,238,246,0.85)';
+    ctx2d.lineWidth = 2;
+    ctx2d.beginPath();
+    const mid = canvas.height / 2;
+    for (let i = 0; i < buf.length; i++) {
+      const x = (i / (buf.length - 1)) * canvas.width;
+      const v = (buf[i] - 128) / 128;
+      const y = mid + v * (canvas.height * 0.38);
+      if (i === 0) ctx2d.moveTo(x, y);
+      else ctx2d.lineTo(x, y);
+    }
+    ctx2d.stroke();
+
+    rafId = requestAnimationFrame(drawScope);
+  }
+  function startScope() { if (!rafId) rafId = requestAnimationFrame(drawScope); }
+  function stopScope() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // --- Buttons ---
+  startBtn.addEventListener('click', async () => {
+    ensureAudio();
+    if (ac.state !== 'running') await ac.resume();
+    running = true;
+    startScheduler();
+    startScope();
+    statusEl.textContent = 'Status: running';
+  });
+
+  stopBtn.addEventListener('click', async () => {
+    running = false;
+    stopScheduler();
+    stopScope();
+    statusEl.textContent = 'Status: stopped';
+    if (ac && ac.state === 'running') await ac.suspend();
+  });
+
+  burstBtn.addEventListener('click', async () => {
+    ensureAudio();
+    if (ac.state !== 'running') await ac.resume();
+    triggerTakeoff(ac.currentTime);
+    statusEl.textContent = 'Status: burst triggered';
+    startScope();
+    if (!running) setTimeout(() => { if (!running) stopScope(); }, 900);
+  });
+})();
+</script>
+</body>
+</html>

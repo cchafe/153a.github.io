@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Organic Spider Ballooning (V2)</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1a1a1a; color: #d0d0d0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .controls { background: #2a2a2a; padding: 30px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 320px; border: 1px solid #333; }
+        h2 { font-weight: 300; letter-spacing: 1px; color: #fff; margin-bottom: 25px; text-align: center; font-size: 1.4em;}
+        .control-group { margin-bottom: 20px; }
+        label { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.85em; color: #888; text-transform: uppercase; letter-spacing: 0.5px;}
+        input[type="range"] { -webkit-appearance: none; width: 100%; background: #444; height: 4px; border-radius: 2px; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: #ccc; border-radius: 50%; cursor: pointer; transition: background .15s; }
+        input[type="range"]::-webkit-slider-thumb:hover { background: #fff; }
+        button { width: 100%; padding: 12px; background: #3e3e3e; color: #fff; border: 1px solid #555; border-radius: 6px; cursor: pointer; font-size: 0.9em; transition: all 0.2s; margin-top: 10px; font-weight: 500;}
+        button:hover { background: #505050; border-color: #777; }
+        button.active { background: #eee; color: #111; border-color: #fff; }
+        .status { margin-top: 15px; font-size: 0.75em; color: #666; text-align: center; font-style: italic; min-height: 1.2em;}
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <h2>Spider Ballooning <span style="font-size:0.5em; opacity:0.5; vertical-align: middle">Organic</span></h2>
+        
+        <div class="control-group">
+            <label><span>Density (Swarm Rate)</span></label>
+            <input type="range" id="rate" min="50" max="2000" value="800" step="50">
+        </div>
+
+        <div class="control-group">
+            <label><span>Wind Force (Intensity)</span></label>
+            <input type="range" id="loudness" min="0" max="1" value="0.6" step="0.01">
+        </div>
+
+        <button id="toggleBtn">Start Experience</button>
+        <div class="status" id="status">Headphones recommended for binaural effect</div>
+    </div>
+
+    <script>
+        let audioCtx;
+        let isPlaying = false;
+        let nextEventTime = 0;
+        let timerID;
+        
+        // Reusable Noise Buffer (5 seconds of white noise)
+        let noiseBuffer;
+
+        const toggleBtn = document.getElementById('toggleBtn');
+        const rateSlider = document.getElementById('rate');
+        const loudnessSlider = document.getElementById('loudness');
+        const statusDisplay = document.getElementById('status');
+
+        async function initAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Create 5 seconds of noise buffer
+            const bufferSize = audioCtx.sampleRate * 5; 
+            noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                // Pink-ish noise approximation (softer than white noise)
+                let b0, b1, b2, b3, b4, b5, b6;
+                b0 = b1 = b2 = b3 = b4 = b5 = b6 = 0.0;
+                let white = Math.random() * 2 - 1;
+                b0 = 0.99886 * b0 + white * 0.0555179;
+                b1 = 0.99332 * b1 + white * 0.0750759;
+                b2 = 0.96900 * b2 + white * 0.1538520;
+                b3 = 0.86650 * b3 + white * 0.3104856;
+                b4 = 0.55000 * b4 + white * 0.5329522;
+                b5 = -0.7616 * b5 - white * 0.0168981;
+                data[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+                data[i] *= 0.11; // compensate for gain
+                b6 = white * 0.115926;
+            }
+        }
+
+        toggleBtn.addEventListener('click', async () => {
+            if (!audioCtx) await initAudio();
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+            if (!isPlaying) {
+                isPlaying = true;
+                nextEventTime = audioCtx.currentTime;
+                scheduler();
+                toggleBtn.textContent = "Stop Experience";
+                toggleBtn.classList.add('active');
+                statusDisplay.textContent = "Simulating silk friction & wind currents...";
+            } else {
+                isPlaying = false;
+                clearTimeout(timerID);
+                toggleBtn.textContent = "Start Experience";
+                toggleBtn.classList.remove('active');
+                statusDisplay.textContent = "Stopped.";
+            }
+        });
+
+        function scheduler() {
+            if (!isPlaying) return;
+            const lookahead = 0.1; 
+            
+            while (nextEventTime < audioCtx.currentTime + lookahead) {
+                spawnSilkEvent(nextEventTime);
+                // Density calculation: higher slider = faster rate
+                const density = 2100 - parseInt(rateSlider.value); 
+                const randomInterval = (Math.random() * 0.8 + 0.2) * (density / 1000); 
+                nextEventTime += randomInterval;
+            }
+            timerID = setTimeout(scheduler, 30);
+        }
+
+        function spawnSilkEvent(time) {
+            const intensity = parseFloat(loudnessSlider.value);
+            
+            // Source: Noise Buffer
+            const source = audioCtx.createBufferSource();
+            source.buffer = noiseBuffer;
+            source.loop = true; // Loop the noise chunk
+
+            // Filter Chain: The "Sculpting"
+            // We use a Highpass + Bandpass to create a "Whistle/Whisper"
+            const bandpass = audioCtx.createBiquadFilter();
+            bandpass.type = "bandpass";
+            // Randomize frequency to mimic different silk lengths/tensions (1kHz - 8kHz)
+            const centerFreq = 800 + Math.random() * 6000; 
+            bandpass.frequency.value = centerFreq;
+            // High Q = clear tone, Low Q = breathy noise. Randomize it.
+            bandpass.Q.value = 5 + Math.random() * 20; 
+
+            // Gain Envelope (The Shape)
+            const gainNode = audioCtx.createGain();
+            
+            // Panning
+            const panner = audioCtx.createStereoPanner();
+            panner.pan.value = (Math.random() * 2) - 1;
+
+            // Connect graph
+            source.connect(bandpass);
+            bandpass.connect(gainNode);
+            gainNode.connect(panner);
+            panner.connect(audioCtx.destination);
+
+            // Envelope Logic: Organic Swell
+            // Instead of a beep (instant on), silk "zips" or "swells"
+            const duration = 0.5 + Math.random() * 2.0; // Longer, drifting sounds
+            
+            gainNode.gain.setValueAtTime(0, time);
+            // Soft attack (wind picking up the silk)
+            gainNode.gain.linearRampToValueAtTime(intensity * (0.05 + Math.random() * 0.05), time + (duration * 0.2)); 
+            // Long tail release
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + duration);
+
+            // Filter Movement (Simulating Doppler or Tension change)
+            bandpass.frequency.setValueAtTime(centerFreq, time);
+            bandpass.frequency.exponentialRampToValueAtTime(centerFreq * (0.5 + Math.random()), time + duration);
+
+            // Playback
+            // Start at a random offset in the noise buffer so every sound is unique
+            const randomOffset = Math.random() * 4; 
+            source.start(time, randomOffset);
+            source.stop(time + duration + 0.1);
+        }
+    </script>
+</body>
+</html>

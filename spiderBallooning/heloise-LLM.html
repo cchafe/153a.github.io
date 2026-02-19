@@ -1,0 +1,162 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2575.2">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+  </style>
+</head>
+<body>
+<p class="p1">&lt;!DOCTYPE html&gt;</p>
+<p class="p1">&lt;html lang="en"&gt;</p>
+<p class="p1">&lt;head&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;meta charset="UTF-8" /&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;title&gt;Spider Ballooning Sonification&lt;/title&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;style&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>body {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-family: sans-serif;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>background: #0e0e11;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>color: #eaeaf0;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>display: flex;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>flex-direction: column;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>align-items: center;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 40px;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>h1 {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-weight: 400;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>margin-bottom: 20px;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>.control {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>margin: 15px 0;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>width: 300px;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>label {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>display: flex;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>justify-content: space-between;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-size: 14px;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>input[type="range"] {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>width: 100%;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">    </span>button {</p>
+<p class="p1"><span class="Apple-converted-space">      </span>margin-top: 30px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>padding: 10px 20px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>font-size: 15px;</p>
+<p class="p1"><span class="Apple-converted-space">      </span>cursor: pointer;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/style&gt;</p>
+<p class="p1">&lt;/head&gt;</p>
+<p class="p1">&lt;body&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;h1&gt;Spider Ballooning — Sonification&lt;/h1&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;div class="control"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;span&gt;Event rate&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;span id="rateVal"&gt;1.0&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;input id="rate" type="range" min="0.2" max="5" step="0.1" value="1" /&gt;</p>
+<p class="p1">&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;div class="control"&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;span&gt;Loudness&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">    </span>&lt;span id="gainVal"&gt;0.3&lt;/span&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;/label&gt;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>&lt;input id="gain" type="range" min="0" max="1" step="0.01" value="0.3" /&gt;</p>
+<p class="p1">&lt;/div&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;button id="toggle"&gt;Start&lt;/button&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;script&gt;</p>
+<p class="p1">let ctx;</p>
+<p class="p1">let masterGain;</p>
+<p class="p1">let intervalId;</p>
+<p class="p1">let running = false;</p>
+<p class="p2"><br></p>
+<p class="p1">const rateSlider = document.getElementById("rate");</p>
+<p class="p1">const gainSlider = document.getElementById("gain");</p>
+<p class="p1">const rateVal = document.getElementById("rateVal");</p>
+<p class="p1">const gainVal = document.getElementById("gainVal");</p>
+<p class="p1">const toggleBtn = document.getElementById("toggle");</p>
+<p class="p2"><br></p>
+<p class="p1">rateVal.textContent = rateSlider.value;</p>
+<p class="p1">gainVal.textContent = gainSlider.value;</p>
+<p class="p2"><br></p>
+<p class="p1">rateSlider.oninput = () =&gt; rateVal.textContent = rateSlider.value;</p>
+<p class="p1">gainSlider.oninput = () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>gainVal.textContent = gainSlider.value;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if (masterGain) masterGain.gain.value = gainSlider.value;</p>
+<p class="p1">};</p>
+<p class="p2"><br></p>
+<p class="p1">function createNoiseBuffer(context) {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const buffer = context.createBuffer(1, context.sampleRate, context.sampleRate);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const data = buffer.getChannelData(0);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>for (let i = 0; i &lt; data.length; i++) {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>data[i] = Math.random() * 2 - 1;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>return buffer;</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function triggerBallooningEvent() {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>const noise = ctx.createBufferSource();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>noise.buffer = createNoiseBuffer(ctx);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const filter = ctx.createBiquadFilter();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>filter.type = "bandpass";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>filter.frequency.value = 800 + Math.random() * 1200;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>filter.Q.value = 2 + Math.random() * 4;</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const env = ctx.createGain();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>env.gain.setValueAtTime(0, ctx.currentTime);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>env.gain.linearRampToValueAtTime(1, ctx.currentTime + 0.02);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>env.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>noise.connect(filter);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>filter.connect(env);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>env.connect(masterGain);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>noise.start();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>noise.stop(ctx.currentTime + 0.5);</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function start() {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>ctx = new (window.AudioContext || window.webkitAudioContext)();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>masterGain = ctx.createGain();</p>
+<p class="p1"><span class="Apple-converted-space">  </span>masterGain.gain.value = gainSlider.value;</p>
+<p class="p1"><span class="Apple-converted-space">  </span>masterGain.connect(ctx.destination);</p>
+<p class="p2"><br></p>
+<p class="p1"><span class="Apple-converted-space">  </span>const schedule = () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>triggerBallooningEvent();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>const rate = parseFloat(rateSlider.value);</p>
+<p class="p1"><span class="Apple-converted-space">    </span>intervalId = setTimeout(schedule, 1000 / rate);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>};</p>
+<p class="p1"><span class="Apple-converted-space">  </span>schedule();</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">function stop() {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>clearTimeout(intervalId);</p>
+<p class="p1"><span class="Apple-converted-space">  </span>ctx.close();</p>
+<p class="p1">}</p>
+<p class="p2"><br></p>
+<p class="p1">toggleBtn.onclick = async () =&gt; {</p>
+<p class="p1"><span class="Apple-converted-space">  </span>if (!running) {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>await start();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>toggleBtn.textContent = "Stop";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>} else {</p>
+<p class="p1"><span class="Apple-converted-space">    </span>stop();</p>
+<p class="p1"><span class="Apple-converted-space">    </span>toggleBtn.textContent = "Start";</p>
+<p class="p1"><span class="Apple-converted-space">  </span>}</p>
+<p class="p1"><span class="Apple-converted-space">  </span>running = !running;</p>
+<p class="p1">};</p>
+<p class="p1">&lt;/script&gt;</p>
+<p class="p2"><br></p>
+<p class="p1">&lt;/body&gt;</p>
+<p class="p1">&lt;/html&gt;</p>
+</body>
+</html>

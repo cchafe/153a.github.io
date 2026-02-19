@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spider Ballooning Sonification</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(180deg, 
+                #1a1a2e 0%, 
+                #16213e 30%, 
+                #0f3460 60%, 
+                #533483 100%);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+            overflow-x: hidden;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 300;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            opacity: 0.7;
+            margin-bottom: 2rem;
+            text-align: center;
+            max-width: 500px;
+            line-height: 1.5;
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            aspect-ratio: 4/3;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .controls {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 1.5rem 2rem;
+            width: 100%;
+            max-width: 500px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .start-btn {
+            width: 100%;
+            padding: 1rem 2rem;
+            font-size: 1.1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 1.5rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+        }
+
+        .start-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .start-btn:active {
+            transform: translateY(0);
+        }
+
+        .start-btn.active {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .slider-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .slider-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .slider-label span:first-child {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            opacity: 0.8;
+        }
+
+        .slider-value {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #667eea;
+            min-width: 50px;
+            text-align: right;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        .sound-layers {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .layer-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+
+        .layer-toggle input {
+            accent-color: #667eea;
+            width: 16px;
+            height: 16px;
+        }
+
+        .description {
+            margin-top: 2rem;
+            max-width: 500px;
+            font-size: 0.85rem;
+            line-height: 1.8;
+            opacity: 0.6;
+            text-align: center;
+        }
+
+        .description strong {
+            color: #667eea;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <h1>Spider Ballooning</h1>
+    <p class="subtitle">Sonification of the ethereal journey of spiders riding silk threads on air currents</p>
+    
+    <div class="canvas-container">
+        <canvas id="visualization"></canvas>
+    </div>
+
+    <div class="controls">
+        <button id="startBtn" class="start-btn">Begin Ballooning</button>
+        
+        <div class="slider-group">
+            <div class="slider-label">
+                <span>Ballooning Rate</span>
+                <span class="slider-value" id="rateValue">1.0x</span>
+            </div>
+            <input type="range" id="rateSlider" min="0.1" max="3" step="0.1" value="1">
+        </div>
+
+        <div class="slider-group">
+            <div class="slider-label">
+                <span>Loudness</span>
+                <span class="slider-value" id="loudnessValue">50%</span>
+            </div>
+            <input type="range" id="loudnessSlider" min="0" max="100" step="1" value="50">
+        </div>
+
+        <div class="slider-group">
+            <div class="slider-label">
+                <span>Wind Intensity</span>
+                <span class="slider-value" id="windValue">50%</span>
+            </div>
+            <input type="range" id="windSlider" min="0" max="100" step="1" value="50">
+        </div>
+
+        <div class="sound-layers">
+            <label class="layer-toggle">
+                <input type="checkbox" id="silkLayer" checked>
+                Silk Release
+            </label>
+            <label class="layer-toggle">
+                <input type="checkbox" id="windLayer" checked>
+                Wind Currents
+            </label>
+            <label class="layer-toggle">
+                <input type="checkbox" id="floatLayer" checked>
+                Floating Motion
+            </label>
+            <label class="layer-toggle">
+                <input type="checkbox" id="shimmerLayer" checked>
+                Atmospheric Shimmer
+            </label>
+        </div>
+    </div>
+
+    <p class="description">
+        <strong>Silk Release:</strong> High sparkly tones as threads emerge<br>
+        <strong>Wind Currents:</strong> Filtered noise simulating air movement<br>
+        <strong>Floating Motion:</strong> Gentle oscillating pads for the drift<br>
+        <strong>Atmospheric Shimmer:</strong> Ambient harmonics of the journey
+    </p>
+
+    <script>
+        // Audio Context and Nodes
+        let audioCtx = null;
+        let masterGain = null;
+        let isPlaying = false;
+        
+        // Sound layer nodes
+        let silkOscillators = [];
+        let silkGain = null;
+        let windNoise = null;
+        let windFilter = null;
+        let windGain = null;
+        let floatOscillators = [];
+        let floatGain = null;
+        let shimmerOscillators = [];
+        let shimmerGain = null;
+        
+        // Parameters
+        let rate = 1.0;
+        let loudness = 0.5;
+        let windIntensity = 0.5;
+        
+        // Layer toggles
+        let layers = {
+            silk: true,
+            wind: true,
+            float: true,
+            shimmer: true
+        };
+
+        // Visualization
+        const canvas = document.getElementById('visualization');
+        const ctx = canvas.getContext('2d');
+        let spiders = [];
+        let silkThreads = [];
+        let animationId = null;
+
+        // Initialize canvas
+        function initCanvas() {
+            canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+            canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+
+        // Spider class for visualization
+        class Spider {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.offsetWidth;
+                this.y = canvas.offsetHeight + 20;
+                this.size = 3 + Math.random() * 4;
+                this.speed = 0.3 + Math.random() * 0.5;
+                this.wobble = Math.random() * Math.PI * 2;
+                this.wobbleSpeed = 0.02 + Math.random() * 0.03;
+                this.threads = [];
+                this.threadCount = 3 + Math.floor(Math.random() * 4);
+            }
+
+            update() {
+                this.wobble += this.wobbleSpeed * rate;
+                this.x += Math.sin(this.wobble) * windIntensity * 2;
+                this.y -= this.speed * rate;
+
+                // Add silk threads
+                if (Math.random() < 0.1 * rate && this.threads.length < this.threadCount) {
+                    this.threads.push({
+                        angle: -Math.PI/2 + (Math.random() - 0.5) * 0.8,
+                        length: 20 + Math.random() * 40,
+                        wave: Math.random() * Math.PI * 2
+                    });
+                }
+
+                // Update threads
+                this.threads.forEach(t => {
+                    t.wave += 0.05 * rate;
+                    t.angle += Math.sin(t.wave) * 0.01 * windIntensity;
+                });
+
+                if (this.y < -50) this.reset();
+            }
+
+            draw() {
+                // Draw threads
+                ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 + windIntensity * 0.3})`;
+                ctx.lineWidth = 0.5;
+                this.threads.forEach(t => {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    const endX = this.x + Math.cos(t.angle) * t.length;
+                    const endY = this.y + Math.sin(t.angle) * t.length;
+                    const cpX = this.x + Math.cos(t.angle) * t.length * 0.5 + Math.sin(t.wave) * 10 * windIntensity;
+                    const cpY = this.y + Math.sin(t.angle) * t.length * 0.5;
+                    ctx.quadraticCurveTo(cpX, cpY, endX, endY);
+                    ctx.stroke();
+                });
+
+                // Draw spider body
+                ctx.fillStyle = '#2a2a3a';
+                ctx.beginPath();
+                ctx.ellipse(this.x, this.y, this.size * 0.6, this.size, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Highlight
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.beginPath();
+                ctx.ellipse(this.x - this.size * 0.2, this.y - this.size * 0.3, this.size * 0.2, this.size * 0.3, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Create white noise buffer
+        function createNoiseBuffer() {
+            const bufferSize = audioCtx.sampleRate * 2;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            return buffer;
+        }
+
+        // Initialize audio
+        function initAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            masterGain = audioCtx.createGain();
+            masterGain.gain.value = loudness * 0.5;
+            masterGain.connect(audioCtx.destination);
+
+            // Create compressor for smoother output
+            const compressor = audioCtx.createDynamicsCompressor();
+            compressor.threshold.value = -24;
+            compressor.knee.value = 30;
+            compressor.ratio.value = 12;
+            compressor.attack.value = 0.003;
+            compressor.release.value = 0.25;
+            compressor.connect(masterGain);
+
+            // Silk release sounds - high sparkly tones
+            silkGain = audioCtx.createGain();
+            silkGain.gain.value = layers.silk ? 0.15 : 0;
+            silkGain.connect(compressor);
+
+            // Wind sounds - filtered noise
+            windGain = audioCtx.createGain();
+            windGain.gain.value = layers.wind ? 0.2 : 0;
+            
+            const noiseBuffer = createNoiseBuffer();
+            windNoise = audioCtx.createBufferSource();
+            windNoise.buffer = noiseBuffer;
+            windNoise.loop = true;
+            
+            windFilter = audioCtx.createBiquadFilter();
+            windFilter.type = 'bandpass';
+            windFilter.frequency.value = 400 + windIntensity * 800;
+            windFilter.Q.value = 0.5;
+            
+            const windFilter2 = audioCtx.createBiquadFilter();
+            windFilter2.type = 'lowpass';
+            windFilter2.frequency.value = 2000;
+            
+            windNoise.connect(windFilter);
+            windFilter.connect(windFilter2);
+            windFilter2.connect(windGain);
+            windGain.connect(compressor);
+            windNoise.start();
+
+            // Floating motion - gentle oscillating pads
+            floatGain = audioCtx.createGain();
+            floatGain.gain.value = layers.float ? 0.12 : 0;
+            floatGain.connect(compressor);
+
+            const floatFreqs = [220, 277.18, 329.63, 440]; // A minor chord
+            floatFreqs.forEach((freq, i) => {
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                
+                const oscGain = audioCtx.createGain();
+                oscGain.gain.value = 0.25;
+                
+                // LFO for gentle movement
+                const lfo = audioCtx.createOscillator();
+                lfo.frequency.value = 0.1 + i * 0.05;
+                const lfoGain = audioCtx.createGain();
+                lfoGain.gain.value = 5;
+                lfo.connect(lfoGain);
+                lfoGain.connect(osc.frequency);
+                lfo.start();
+                
+                osc.connect(oscGain);
+                oscGain.connect(floatGain);
+                osc.start();
+                
+                floatOscillators.push({ osc, lfo, lfoGain, oscGain });
+            });
+
+            // Atmospheric shimmer - high harmonics
+            shimmerGain = audioCtx.createGain();
+            shimmerGain.gain.value = layers.shimmer ? 0.08 : 0;
+            shimmerGain.connect(compressor);
+
+            const shimmerFreqs = [1318.51, 1567.98, 1760, 2093]; // High harmonics
+            shimmerFreqs.forEach((freq, i) => {
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                
+                const oscGain = audioCtx.createGain();
+                oscGain.gain.value = 0.2;
+                
+                // Slow amplitude modulation
+                const ampLfo = audioCtx.createOscillator();
+                ampLfo.frequency.value = 0.2 + i * 0.1;
+                const ampLfoGain = audioCtx.createGain();
+                ampLfoGain.gain.value = 0.15;
+                ampLfo.connect(ampLfoGain);
+                ampLfoGain.connect(oscGain.gain);
+                ampLfo.start();
+                
+                osc.connect(oscGain);
+                oscGain.connect(shimmerGain);
+                osc.start();
+                
+                shimmerOscillators.push({ osc, ampLfo, ampLfoGain, oscGain });
+            });
+
+            // Start silk sparkle scheduler
+            scheduleSilkSparkles();
+        }
+
+        // Schedule random silk release sparkles
+        function scheduleSilkSparkles() {
+            if (!isPlaying) return;
+            
+            if (layers.silk && Math.random() < 0.3 * rate) {
+                playSilkSparkle();
+            }
+            
+            const nextTime = (100 + Math.random() * 400) / rate;
+            setTimeout(scheduleSilkSparkles, nextTime);
+        }
+
+        // Play a single silk sparkle
+        function playSilkSparkle() {
+            if (!audioCtx || !layers.silk) return;
+            
+            const now = audioCtx.currentTime;
+            const baseFreq = 2000 + Math.random() * 4000;
+            
+            const osc = audioCtx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(baseFreq, now);
+            osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.5, now + 0.3);
+            
+            const sparkleGain = audioCtx.createGain();
+            sparkleGain.gain.setValueAtTime(0, now);
+            sparkleGain.gain.linearRampToValueAtTime(0.3, now + 0.01);
+            sparkleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            
+            osc.connect(sparkleGain);
+            sparkleGain.connect(silkGain);
+            
+            osc.start(now);
+            osc.stop(now + 0.35);
+        }
+
+        // Update audio parameters
+        function updateAudio() {
+            if (!audioCtx) return;
+            
+            masterGain.gain.setTargetAtTime(loudness * 0.5, audioCtx.currentTime, 0.1);
+            
+            // Update wind filter based on intensity
+            if (windFilter) {
+                windFilter.frequency.setTargetAtTime(400 + windIntensity * 800, audioCtx.currentTime, 0.1);
+            }
+            
+            // Update float LFO rates based on rate
+            floatOscillators.forEach((obj, i) => {
+                obj.lfo.frequency.setTargetAtTime((0.1 + i * 0.05) * rate, audioCtx.currentTime, 0.1);
+            });
+            
+            // Update shimmer rates
+            shimmerOscillators.forEach((obj, i) => {
+                obj.ampLfo.frequency.setTargetAtTime((0.2 + i * 0.1) * rate, audioCtx.currentTime, 0.1);
+            });
+            
+            // Update layer gains
+            if (silkGain) silkGain.gain.setTargetAtTime(layers.silk ? 0.15 : 0, audioCtx.currentTime, 0.1);
+            if (windGain) windGain.gain.setTargetAtTime(layers.wind ? 0.2 * windIntensity : 0, audioCtx.currentTime, 0.1);
+            if (floatGain) floatGain.gain.setTargetAtTime(layers.float ? 0.12 : 0, audioCtx.currentTime, 0.1);
+            if (shimmerGain) shimmerGain.gain.setTargetAtTime(layers.shimmer ? 0.08 : 0, audioCtx.currentTime, 0.1);
+        }
+
+        // Animation loop
+        function animate() {
+            ctx.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
+            
+            // Draw gradient background effect
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.offsetHeight);
+            gradient.addColorStop(0, 'rgba(83, 52, 131, 0.1)');
+            gradient.addColorStop(1, 'rgba(26, 26, 46, 0.1)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
+            
+            // Update and draw spiders
+            spiders.forEach(spider => {
+                spider.update();
+                spider.draw();
+            });
+            
+            if (isPlaying) {
+                animationId = requestAnimationFrame(animate);
+            }
+        }
+
+        // Start/Stop
+        function togglePlay() {
+            const btn = document.getElementById('startBtn');
+            
+            if (!isPlaying) {
+                isPlaying = true;
+                btn.textContent = 'Stop Ballooning';
+                btn.classList.add('active');
+                
+                initCanvas();
+                
+                // Create spiders
+                spiders = [];
+                for (let i = 0; i < 8; i++) {
+                    const spider = new Spider();
+                    spider.y = Math.random() * canvas.offsetHeight;
+                    spiders.push(spider);
+                }
+                
+                initAudio();
+                animate();
+            } else {
+                isPlaying = false;
+                btn.textContent = 'Begin Ballooning';
+                btn.classList.remove('active');
+                
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                }
+                
+                if (audioCtx) {
+                    audioCtx.close();
+                    audioCtx = null;
+                    silkOscillators = [];
+                    floatOscillators = [];
+                    shimmerOscillators = [];
+                }
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('startBtn').addEventListener('click', togglePlay);
+
+        document.getElementById('rateSlider').addEventListener('input', (e) => {
+            rate = parseFloat(e.target.value);
+            document.getElementById('rateValue').textContent = rate.toFixed(1) + 'x';
+            updateAudio();
+        });
+
+        document.getElementById('loudnessSlider').addEventListener('input', (e) => {
+            loudness = parseInt(e.target.value) / 100;
+            document.getElementById('loudnessValue').textContent = e.target.value + '%';
+            updateAudio();
+        });
+
+        document.getElementById('windSlider').addEventListener('input', (e) => {
+            windIntensity = parseInt(e.target.value) / 100;
+            document.getElementById('windValue').textContent = e.target.value + '%';
+            updateAudio();
+        });
+
+        // Layer toggles
+        document.getElementById('silkLayer').addEventListener('change', (e) => {
+            layers.silk = e.target.checked;
+            updateAudio();
+        });
+
+        document.getElementById('windLayer').addEventListener('change', (e) => {
+            layers.wind = e.target.checked;
+            updateAudio();
+        });
+
+        document.getElementById('floatLayer').addEventListener('change', (e) => {
+            layers.float = e.target.checked;
+            updateAudio();
+        });
+
+        document.getElementById('shimmerLayer').addEventListener('change', (e) => {
+            layers.shimmer = e.target.checked;
+            updateAudio();
+        });
+
+        // Handle resize
+        window.addEventListener('resize', () => {
+            if (isPlaying) initCanvas();
+        });
+
+        // Initial canvas setup
+        initCanvas();
+    </script>
+</body>
+</html>

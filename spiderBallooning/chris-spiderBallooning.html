@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spider Ballooning Sonification (Web Audio)</title>
+  <style>
+    :root{
+      --bg:#0b1020;--panel:rgba(255,255,255,0.06);--text:rgba(255,255,255,0.92);--muted:rgba(255,255,255,0.72);
+      --accent:#78a6ff;--danger:#ff6b6b;--ok:#6bffb7;
+    }
+    html,body{height:100%}
+    body{
+      margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      background:radial-gradient(1200px 800px at 20% 15%,#1a2550 0%,var(--bg) 55%,#050812 100%);
+      color:var(--text);display:grid;place-items:center;
+    }
+    .wrap{width:min(980px,calc(100vw - 24px));display:grid;grid-template-columns:1.1fr 0.9fr;gap:16px;align-items:start}
+    @media (max-width:920px){.wrap{grid-template-columns:1fr}}
+    .card{
+      background:var(--panel);border:1px solid rgba(255,255,255,0.10);border-radius:14px;padding:16px 16px 14px;
+      box-shadow:0 10px 35px rgba(0,0,0,0.35);backdrop-filter:blur(10px);
+    }
+    h1{font-size:18px;margin:0 0 10px;letter-spacing:.2px;font-weight:650}
+    p{margin:10px 0;color:var(--muted);line-height:1.35}
+    .row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+    .controls{display:grid;gap:12px;margin-top:12px}
+    label{font-size:13px;color:rgba(255,255,255,0.86)}
+    .slider{display:grid;grid-template-columns:150px 1fr 68px;gap:10px;align-items:center}
+    input[type="range"]{width:100%}
+    .val{text-align:right;font-variant-numeric:tabular-nums;color:rgba(255,255,255,0.85);font-size:13px}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button{
+      border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.08);color:var(--text);
+      padding:10px 12px;border-radius:12px;cursor:pointer;transition:transform .05s ease,background .15s ease,border-color .15s ease;
+      font-weight:620;letter-spacing:.2px;
+    }
+    button:hover{background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.22)}
+    button:active{transform:translateY(1px)}
+    button.primary{background:rgba(120,166,255,0.22);border-color:rgba(120,166,255,0.4)}
+    button.primary:hover{background:rgba(120,166,255,0.30)}
+    button.danger{background:rgba(255,107,107,0.16);border-color:rgba(255,107,107,0.28)}
+    .status{
+      display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:10px;
+      padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);
+    }
+    .pill{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,0.14);color:rgba(255,255,255,0.82);font-variant-numeric:tabular-nums}
+    .pill.on{border-color:rgba(107,255,183,0.35);background:rgba(107,255,183,0.10)}
+    .pill.off{border-color:rgba(255,107,107,0.35);background:rgba(255,107,107,0.10)}
+    canvas{width:100%;height:280px;display:block;border-radius:12px;background:rgba(0,0,0,0.18);border:1px solid rgba(255,255,255,0.10)}
+    .small{font-size:12px;color:rgba(255,255,255,0.70)}
+    code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:12px;color:rgba(255,255,255,0.88);
+      background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:8px;border:1px solid rgba(255,255,255,0.12)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <div class="row">
+        <h1>Spider ballooning sonification</h1>
+        <div class="pill off" id="pill">Stopped</div>
+      </div>
+
+      <p>
+        “Silk plucks” over two independent <code>1/f</code>-ish wind beds. Each wind bed has
+        <strong>independent stereo panning</strong> and <strong>independent drift</strong> with different, slowly changing rates.
+      </p>
+
+      <div class="controls" role="group" aria-label="Audio controls">
+        <div class="slider">
+          <label for="rate">Rate (events/sec)</label>
+          <input id="rate" type="range" min="0.2" max="12" step="0.1" value="2.5" />
+          <div class="val" id="rateVal">2.5</div>
+        </div>
+
+        <div class="slider">
+          <label for="loudness">Loudness</label>
+          <input id="loudness" type="range" min="-36" max="0" step="1" value="-14" />
+          <div class="val" id="loudnessVal">-14 dB</div>
+        </div>
+
+        <div class="slider">
+          <label for="wind">Wind intensity</label>
+          <input id="wind" type="range" min="0" max="1" step="0.01" value="0.45" />
+          <div class="val" id="windVal">0.45</div>
+        </div>
+
+        <div class="slider">
+          <label for="brightness">Silk center freq</label>
+          <input id="brightness" type="range" min="800" max="3600" step="10" value="1600" />
+          <div class="val" id="brightnessVal">1600 Hz</div>
+        </div>
+
+        <div class="slider">
+          <label for="randomness">Gustiness (random)</label>
+          <input id="randomness" type="range" min="0" max="1" step="0.01" value="0.35" />
+          <div class="val" id="randomnessVal">0.35</div>
+        </div>
+
+        <div class="btns">
+          <button class="primary" id="startBtn">Start (unlock audio)</button>
+          <button class="danger" id="stopBtn" disabled>Stop</button>
+        </div>
+
+        <div class="status">
+          <div>
+            <div class="small">Tip: first click must be user-initiated (browser autoplay policy).</div>
+            <div class="small">Headphones recommended.</div>
+          </div>
+          <div class="pill" id="ctxState">Audio: n/a</div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="card">
+      <h1>Live visualization</h1>
+      <p class="small">Waveform (post-mix) + a simple “altitude” trace driven by the same event model.</p>
+      <canvas id="scope" width="900" height="560" aria-label="Oscilloscope"></canvas>
+      <p class="small">
+        The two wind tracks each use their own noise source, filters, and a panner whose speed itself drifts over time.
+      </p>
+    </aside>
+  </div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  const rateEl = $("rate");
+  const loudEl = $("loudness");
+  const windEl = $("wind");
+  const brightEl = $("brightness");
+  const randEl = $("randomness");
+
+  const rateVal = $("rateVal");
+  const loudVal = $("loudnessVal");
+  const windVal = $("windVal");
+  const brightVal = $("brightnessVal");
+  const randVal = $("randomnessVal");
+
+  const startBtn = $("startBtn");
+  const stopBtn = $("stopBtn");
+  const pill = $("pill");
+  const ctxState = $("ctxState");
+
+  const canvas = $("scope");
+  const g = canvas.getContext("2d");
+
+  let audio = null;
+  let running = false;
+
+  // Visual model state
+  let altitude = 0;
+  let altVel = 0;
+  let lastDrawT = performance.now();
+
+  function dbToGain(db) { return Math.pow(10, db / 20); }
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+
+  function setPill(isOn) {
+    pill.textContent = isOn ? "Running" : "Stopped";
+    pill.classList.toggle("on", isOn);
+    pill.classList.toggle("off", !isOn);
+  }
+  function setCtxState(text, on) {
+    ctxState.textContent = text;
+    ctxState.classList.toggle("on", !!on);
+    ctxState.classList.toggle("off", !on);
+  }
+
+  function uiToAudioParams() {
+    return {
+      rate: parseFloat(rateEl.value),
+      masterDb: parseFloat(loudEl.value),
+      wind: parseFloat(windEl.value),
+      brightness: parseFloat(brightEl.value),
+      randomness: parseFloat(randEl.value)
+    };
+  }
+
+  function updateLabels() {
+    const p = uiToAudioParams();
+    rateVal.textContent = p.rate.toFixed(1);
+    loudVal.textContent = `${p.masterDb.toFixed(0)} dB`;
+    windVal.textContent = p.wind.toFixed(2);
+    brightVal.textContent = `${p.brightness.toFixed(0)} Hz`;
+    randVal.textContent = p.randomness.toFixed(2);
+  }
+
+  [rateEl, loudEl, windEl, brightEl, randEl].forEach(el => {
+    el.addEventListener("input", () => {
+      updateLabels();
+      if (audio) applyParams();
+    });
+  });
+  updateLabels();
+
+  function createNoiseBuffer(ctx, seconds=3) {
+    const length = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1);
+    return buf;
+  }
+
+  function makePinkishChain(ctx) {
+    const lp1 = ctx.createBiquadFilter(); lp1.type = "lowpass"; lp1.frequency.value = 2400; lp1.Q.value = 0.0;
+    const lp2 = ctx.createBiquadFilter(); lp2.type = "lowpass"; lp2.frequency.value = 1300; lp2.Q.value = 0.0;
+    const lp3 = ctx.createBiquadFilter(); lp3.type = "lowpass"; lp3.frequency.value = 720;  lp3.Q.value = 0.0;
+    const bp  = ctx.createBiquadFilter(); bp.type  = "bandpass"; bp.frequency.value  = 420; bp.Q.value = 0.75;
+    const hp  = ctx.createBiquadFilter(); hp.type  = "highpass"; hp.frequency.value  = 70;  hp.Q.value = 0.7;
+    lp1.connect(lp2); lp2.connect(lp3); lp3.connect(bp); bp.connect(hp);
+    return { input: lp1, output: hp, lp1, lp2, lp3, bp, hp };
+  }
+
+  // Creates a drifting pan LFO: mainLFO frequency is modulated by a slower "rate LFO".
+  // This makes each wind track move at different AND changing rates.
+  function makeDriftingPan(ctx, baseHz, depthHz, rateHz, panDepth) {
+    const main = ctx.createOscillator();
+    main.type = "sine";
+    main.frequency.value = baseHz;
+
+    const rate = ctx.createOscillator();
+    rate.type = "sine";
+    rate.frequency.value = rateHz;
+
+    const rateToFreq = ctx.createGain();
+    rateToFreq.gain.value = depthHz; // +/- depthHz around baseHz
+    rate.connect(rateToFreq);
+    rateToFreq.connect(main.frequency);
+
+    const pan = ctx.createStereoPanner();
+    const panGain = ctx.createGain();
+    panGain.gain.value = panDepth;
+
+    main.connect(panGain);
+    panGain.connect(pan.pan);
+
+    main.start();
+    rate.start();
+
+    return { pan, main, rate, rateToFreq, panGain };
+  }
+
+  function createAudioGraph() {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+
+    // Master
+    const master = ctx.createGain();
+    master.gain.value = dbToGain(parseFloat(loudEl.value));
+
+    // Safety compressor
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -20;
+    comp.knee.value = 18;
+    comp.ratio.value = 10;
+    comp.attack.value = 0.003;
+    comp.release.value = 0.16;
+
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.75;
+
+    master.connect(comp);
+    comp.connect(analyser);
+    analyser.connect(ctx.destination);
+
+    // Two independent wind tracks
+    const noiseA = ctx.createBufferSource();
+    noiseA.buffer = createNoiseBuffer(ctx, 3.2);
+    noiseA.loop = true;
+
+    const noiseB = ctx.createBufferSource();
+    noiseB.buffer = createNoiseBuffer(ctx, 3.7);
+    noiseB.loop = true;
+
+    const windA = makePinkishChain(ctx);
+    const windB = makePinkishChain(ctx);
+
+    // Slightly different "color"
+    windA.lp1.frequency.value = 2600; windA.lp2.frequency.value = 1400; windA.lp3.frequency.value = 760;
+    windB.lp1.frequency.value = 2100; windB.lp2.frequency.value = 1150; windB.lp3.frequency.value = 640;
+    windA.bp.frequency.value = 380;   windB.bp.frequency.value = 520;
+
+    const windGainA = ctx.createGain(); windGainA.gain.value = 0.0;
+    const windGainB = ctx.createGain(); windGainB.gain.value = 0.0;
+
+    // Panners with drifting rates (different for A and B)
+    const panModA = makeDriftingPan(ctx, 0.030, 0.020, 0.006, 0.70); // slower, rate drifts slowly
+    const panModB = makeDriftingPan(ctx, 0.055, 0.035, 0.009, 0.70); // faster, drifts differently
+
+    noiseA.connect(windA.input);
+    windA.output.connect(windGainA);
+    windGainA.connect(panModA.pan);
+    panModA.pan.connect(master);
+
+    noiseB.connect(windB.input);
+    windB.output.connect(windGainB);
+    windGainB.connect(panModB.pan);
+    panModB.pan.connect(master);
+
+    // Silk plucks: gate windA's "pink-ish" chain through resonator
+    const silkBP = ctx.createBiquadFilter();
+    silkBP.type = "bandpass";
+    silkBP.frequency.value = 1600;
+    silkBP.Q.value = 14;
+
+    const silkHP = ctx.createBiquadFilter();
+    silkHP.type = "highpass";
+    silkHP.frequency.value = 420;
+    silkHP.Q.value = 0.8;
+
+    const silkGain = ctx.createGain();
+    silkGain.gain.value = 0.0;
+
+    windA.lp3.connect(silkBP);
+    silkBP.connect(silkHP);
+    silkHP.connect(silkGain);
+    silkGain.connect(master);
+
+    // Subtle tonal "lift"
+    const tone = ctx.createOscillator();
+    tone.type = "sine";
+    const toneGain = ctx.createGain();
+    toneGain.gain.value = 0.0;
+    tone.connect(toneGain);
+    toneGain.connect(master);
+
+    noiseA.start();
+    noiseB.start();
+    tone.start();
+
+    return {
+      ctx, master, comp, analyser,
+      noiseA, noiseB,
+      windA, windB,
+      windGainA, windGainB,
+      panModA, panModB,
+      silkBP, silkHP, silkGain,
+      tone, toneGain,
+      nextEventT: 0
+    };
+  }
+
+  function applyParams() {
+    if (!audio) return;
+    const p = uiToAudioParams();
+    const now = audio.ctx.currentTime;
+
+    // Master loudness
+    const targetMaster = dbToGain(p.masterDb);
+    audio.master.gain.cancelScheduledValues(now);
+    audio.master.gain.setTargetAtTime(targetMaster, now, 0.03);
+
+    // Wind intensity
+    const base = 0.02 + 0.26 * p.wind;
+    audio.windGainA.gain.cancelScheduledValues(now);
+    audio.windGainB.gain.cancelScheduledValues(now);
+    audio.windGainA.gain.setTargetAtTime(base * 1.02, now, 0.06);
+    audio.windGainB.gain.setTargetAtTime(base * 0.98, now, 0.06);
+
+    // Wind "air band" drift with wind intensity, independently
+    audio.windA.bp.frequency.cancelScheduledValues(now);
+    audio.windB.bp.frequency.cancelScheduledValues(now);
+    audio.windA.bp.frequency.setTargetAtTime(240 + 520 * p.wind, now, 0.10);
+    audio.windB.bp.frequency.setTargetAtTime(300 + 600 * p.wind, now, 0.10);
+
+    // Pan depth increases slightly with wind
+    const depth = 0.55 + 0.35 * p.wind;
+    audio.panModA.panGain.gain.cancelScheduledValues(now);
+    audio.panModB.panGain.gain.cancelScheduledValues(now);
+    audio.panModA.panGain.gain.setTargetAtTime(depth, now, 0.25);
+    audio.panModB.panGain.gain.setTargetAtTime(depth, now, 0.25);
+
+    // Also let pan RATE drift amplitude increase with wind (more variable motion in stronger wind)
+    audio.panModA.rateToFreq.gain.cancelScheduledValues(now);
+    audio.panModB.rateToFreq.gain.cancelScheduledValues(now);
+    audio.panModA.rateToFreq.gain.setTargetAtTime(0.012 + 0.020 * p.wind, now, 0.30);
+    audio.panModB.rateToFreq.gain.setTargetAtTime(0.018 + 0.030 * p.wind, now, 0.30);
+
+    // Brightness for plucks
+    audio.silkBP.frequency.cancelScheduledValues(now);
+    audio.silkBP.frequency.setTargetAtTime(p.brightness, now, 0.04);
+  }
+
+  function scheduleNextEvent() {
+    if (!audio) return;
+    const p = uiToAudioParams();
+    const ctx = audio.ctx;
+
+    const rate = Math.max(0.001, p.rate);
+    const u = Math.max(1e-6, Math.random());
+    let dt = -Math.log(u) / rate;
+    const gust = (Math.random() * 2 - 1) * p.randomness;
+    dt *= clamp(1 + 0.65 * gust, 0.25, 2.5);
+
+    audio.nextEventT = Math.max(ctx.currentTime + 0.01, audio.nextEventT || ctx.currentTime) + dt;
+  }
+
+  function triggerPluck(atTime) {
+    const p = uiToAudioParams();
+
+    const amp = clamp(0.08 + 0.32 * p.wind + 0.14 * (Math.random() - 0.5), 0.05, 0.55);
+
+    const gg = audio.silkGain.gain;
+    gg.cancelScheduledValues(atTime);
+    gg.setValueAtTime(0.0, atTime);
+    gg.linearRampToValueAtTime(amp, atTime + 0.0018);
+    gg.exponentialRampToValueAtTime(0.0010, atTime + 0.070);
+
+    const jitter = (Math.random() * 2 - 1) * (0.14 + 0.45 * p.randomness);
+    const cf = clamp(p.brightness * (1 + 0.18 * jitter), 800, 3600);
+    audio.silkBP.frequency.setTargetAtTime(cf, atTime, 0.012);
+
+    const lift = 0.6 * p.wind + 0.3 * Math.random();
+    altVel += 0.08 * lift;
+
+    const baseHz = 110;
+    const f = clamp(baseHz + altitude * 12, 90, 520);
+    audio.tone.frequency.setTargetAtTime(f, atTime, 0.03);
+
+    const tg = audio.toneGain.gain;
+    const toneAmp = 0.002 + 0.010 * clamp(p.wind, 0, 1);
+    tg.cancelScheduledValues(atTime);
+    tg.setValueAtTime(0.0, atTime);
+    tg.linearRampToValueAtTime(toneAmp, atTime + 0.01);
+    tg.exponentialRampToValueAtTime(0.0006, atTime + 0.20);
+  }
+
+  function audioLoop() {
+    if (!running || !audio) return;
+
+    const ctx = audio.ctx;
+    const lookAhead = 0.20;
+    if (!audio.nextEventT) audio.nextEventT = ctx.currentTime;
+
+    while (audio.nextEventT < ctx.currentTime + lookAhead) {
+      triggerPluck(audio.nextEventT);
+      scheduleNextEvent();
+    }
+
+    requestAnimationFrame(audioLoop);
+  }
+
+  function drawLoop() {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - lastDrawT) / 1000);
+    lastDrawT = now;
+
+    const p = uiToAudioParams();
+    const gravity = -0.18;
+    const drag = 0.92;
+    const turb = (Math.random() * 2 - 1) * 0.04 * p.randomness;
+
+    altVel = (altVel + gravity * dt + turb) * Math.pow(drag, dt * 60);
+    altitude = clamp(altitude + altVel, 0, 40);
+
+    g.clearRect(0, 0, canvas.width, canvas.height);
+
+    g.save();
+    g.globalAlpha = 0.35;
+    g.strokeStyle = "rgba(255,255,255,0.10)";
+    for (let x = 0; x <= canvas.width; x += 60) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, canvas.height); g.stroke(); }
+    for (let y = 0; y <= canvas.height; y += 56) { g.beginPath(); g.moveTo(0, y); g.lineTo(canvas.width, y); g.stroke(); }
+    g.restore();
+
+    if (audio && running) {
+      const analyser = audio.analyser;
+      const n = analyser.fftSize;
+      const data = new Uint8Array(n);
+      analyser.getByteTimeDomainData(data);
+
+      const midY = Math.floor(canvas.height * 0.35);
+      const ampY = Math.floor(canvas.height * 0.22);
+
+      g.save();
+      g.strokeStyle = "rgba(120,166,255,0.95)";
+      g.lineWidth = 2;
+      g.beginPath();
+      for (let i = 0; i < n; i++) {
+        const x = (i / (n - 1)) * canvas.width;
+        const v = (data[i] - 128) / 128;
+        const y = midY + v * ampY;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+      g.restore();
+    } else {
+      g.save();
+      g.fillStyle = "rgba(255,255,255,0.35)";
+      g.font = "14px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      g.fillText("Press Start to hear audio and see the waveform.", 16, 24);
+      g.restore();
+    }
+
+    const barH = Math.floor(canvas.height * 0.45);
+    const baseY = canvas.height - 30;
+    const barX = 26;
+    const barW = canvas.width - 52;
+
+    g.save();
+    g.fillStyle = "rgba(255,255,255,0.10)";
+    g.fillRect(barX, baseY - barH, barW, barH);
+
+    const frac = altitude / 40;
+    const fillW = Math.floor(barW * frac);
+    g.fillStyle = "rgba(107,255,183,0.40)";
+    g.fillRect(barX, baseY - barH, fillW, barH);
+
+    g.strokeStyle = "rgba(255,255,255,0.22)";
+    g.strokeRect(barX, baseY - barH, barW, barH);
+
+    g.fillStyle = "rgba(255,255,255,0.82)";
+    g.font = "13px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    g.fillText(`Altitude (model): ${altitude.toFixed(1)} au`, barX, baseY + 18);
+    g.restore();
+
+    requestAnimationFrame(drawLoop);
+  }
+
+  async function start() {
+    if (running) return;
+
+    if (!audio) audio = createAudioGraph();
+
+    if (audio.ctx.state !== "running") {
+      try { await audio.ctx.resume(); } catch (e) {}
+    }
+
+    running = true;
+    setPill(true);
+    stopBtn.disabled = false;
+    startBtn.disabled = true;
+
+    applyParams();
+
+    audio.nextEventT = audio.ctx.currentTime;
+    scheduleNextEvent();
+
+    setCtxState(`Audio: ${audio.ctx.state}`, audio.ctx.state === "running");
+
+    audioLoop();
+  }
+
+  async function stop() {
+    if (!audio) return;
+    running = false;
+    setPill(false);
+    stopBtn.disabled = true;
+    startBtn.disabled = false;
+
+    const now = audio.ctx.currentTime;
+    audio.master.gain.cancelScheduledValues(now);
+    audio.master.gain.setTargetAtTime(0.0001, now, 0.03);
+
+    setTimeout(async () => {
+      if (!audio) return;
+      try { await audio.ctx.suspend(); } catch (e) {}
+      setCtxState(`Audio: ${audio.ctx.state}`, audio.ctx.state === "running");
+    }, 120);
+  }
+
+  startBtn.addEventListener("click", start);
+  stopBtn.addEventListener("click", stop);
+
+  document.addEventListener("visibilitychange", () => {
+    if (!audio) return;
+    setCtxState(`Audio: ${audio.ctx.state}`, audio.ctx.state === "running");
+  });
+
+  drawLoop();
+})();
+</script>
+</body>
+</html>

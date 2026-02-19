@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spider Ballooning Sonification</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a2a32 0%, #0d1820 100%);
+            color: #e0f0ff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #8ec5fc, #e0c3fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 15px;
+        }
+
+        .description {
+            max-width: 800px;
+            margin: 0 auto 30px;
+            line-height: 1.6;
+            background-color: rgba(255, 255, 255, 0.08);
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid #8ec5fc;
+        }
+
+        .visualization-container {
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #canvas {
+            width: 100%;
+            height: 200px;
+            background-color: rgba(0, 10, 20, 0.7);
+            border-radius: 10px;
+            display: block;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .control-panel {
+            background-color: rgba(255, 255, 255, 0.08);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .control-panel h2 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            color: #8ec5fc;
+            font-size: 1.5rem;
+        }
+
+        .control-panel h2 i {
+            font-size: 1.3rem;
+        }
+
+        .slider-container {
+            margin-bottom: 25px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .slider-label span {
+            font-weight: 500;
+        }
+
+        .slider-value {
+            color: #8ec5fc;
+            font-weight: bold;
+        }
+
+        .slider {
+            width: 100%;
+            height: 10px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: linear-gradient(to right, #0d1820, #8ec5fc);
+            border-radius: 5px;
+            outline: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #e0c3fc;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(224, 195, 252, 0.7);
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        #startBtn {
+            background: linear-gradient(90deg, #4CAF50, #2E7D32);
+            color: white;
+            flex: 2;
+        }
+
+        #stopBtn {
+            background: linear-gradient(90deg, #f44336, #c62828);
+            color: white;
+            flex: 1;
+        }
+
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .sound-elements {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .sound-element {
+            background-color: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            border-top: 3px solid #8ec5fc;
+        }
+
+        .sound-element i {
+            font-size: 1.5rem;
+            color: #e0c3fc;
+            margin-bottom: 10px;
+        }
+
+        .sound-element h3 {
+            font-size: 1rem;
+            margin-bottom: 5px;
+        }
+
+        .sound-element p {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 0.9rem;
+            opacity: 0.7;
+            padding: 20px;
+            width: 100%;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2.2rem;
+            }
+            
+            .control-panel {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-spider"></i> Spider Ballooning Sonification</h1>
+            <p class="subtitle">Experience the phenomenon of spiders dispersing through the air using silk threads</p>
+        </header>
+
+        <div class="description">
+            <p>Spider ballooning is a method of dispersal where spiders release silk threads to catch the wind, carrying them to new locations. This sonification represents the different elements of this process through sound:</p>
+            <ul style="padding-left: 20px; margin-top: 10px;">
+                <li><strong>Wind Gusts</strong> - Brown noise with varying intensity</li>
+                <li><strong>Silk Thread Vibration</strong> - High-frequency sine waves</li>
+                <li><strong>Spider Movement</strong> - Pulsed sounds representing spider activity</li>
+                <li><strong>Atmospheric Turbulence</strong> - Filtered noise with random modulation</li>
+            </ul>
+        </div>
+
+        <div class="visualization-container">
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="controls">
+            <div class="control-panel">
+                <h2><i class="fas fa-sliders-h"></i> Sound Controls</h2>
+                
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span><i class="fas fa-tachometer-alt"></i> Ballooning Rate</span>
+                        <span class="slider-value" id="rateValue">0.5</span>
+                    </div>
+                    <input type="range" min="0.1" max="2" step="0.1" value="0.5" class="slider" id="rateSlider">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-top: 5px;">
+                        <span>Slow Drift</span>
+                        <span>Rapid Dispersal</span>
+                    </div>
+                </div>
+
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span><i class="fas fa-volume-up"></i> Loudness</span>
+                        <span class="slider-value" id="loudnessValue">0.6</span>
+                    </div>
+                    <input type="range" min="0" max="1" step="0.1" value="0.6" class="slider" id="loudnessSlider">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-top: 5px;">
+                        <span>Quiet</span>
+                        <span>Loud</span>
+                    </div>
+                </div>
+
+                <div class="control-buttons">
+                    <button id="startBtn">
+                        <i class="fas fa-play"></i> Start Sonification
+                    </button>
+                    <button id="stopBtn">
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h2><i class="fas fa-music"></i> Sound Elements</h2>
+                <div class="sound-elements">
+                    <div class="sound-element">
+                        <i class="fas fa-wind"></i>
+                        <h3>Wind Gusts</h3>
+                        <p>Brown noise with LFO modulation</p>
+                    </div>
+                    <div class="sound-element">
+                        <i class="fas fa-wave-square"></i>
+                        <h3>Silk Vibration</h3>
+                        <p>High-frequency sine waves</p>
+                    </div>
+                    <div class="sound-element">
+                        <i class="fas fa-spider"></i>
+                        <h3>Spider Pulses</h3>
+                        <p>Rhythmic tonal pulses</p>
+                    </div>
+                    <div class="sound-element">
+                        <i class="fas fa-random"></i>
+                        <h3>Turbulence</h3>
+                        <p>Filtered noise modulation</p>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 25px;">
+                    <h3><i class="fas fa-info-circle"></i> Instructions</h3>
+                    <p style="margin-top: 10px; font-size: 0.95rem; line-height: 1.5;">
+                        Adjust the <strong>Ballooning Rate</strong> to control how quickly spiders disperse (affects rhythm and speed). Use the <strong>Loudness</strong> control to adjust overall volume. Click <strong>Start</strong> to begin the sonification.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Spider Ballooning Sonification using Web Audio API | Created for educational demonstration</p>
+            <p style="margin-top: 5px;">Adjust rate and loudness to explore different aspects of the spider ballooning phenomenon.</p>
+        </footer>
+    </div>
+
+    <script>
+        // Web Audio API Components
+        let audioContext;
+        let isPlaying = false;
+        
+        // Sound sources and nodes
+        let windNoise;
+        let silkOscillator;
+        let spiderPulser;
+        let turbulenceFilter;
+        
+        // Control parameters
+        let rate = 0.5;
+        let loudness = 0.6;
+        
+        // Visualization
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let animationId;
+        
+        // Set canvas dimensions
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // Slider controls
+        const rateSlider = document.getElementById('rateSlider');
+        const loudnessSlider = document.getElementById('loudnessSlider');
+        const rateValue = document.getElementById('rateValue');
+        const loudnessValue = document.getElementById('loudnessValue');
+        
+        rateSlider.addEventListener('input', function() {
+            rate = parseFloat(this.value);
+            rateValue.textContent = rate.toFixed(1);
+            
+            // Update audio parameters if playing
+            if (isPlaying) {
+                updateAudioParameters();
+            }
+        });
+        
+        loudnessSlider.addEventListener('input', function() {
+            loudness = parseFloat(this.value);
+            loudnessValue.textContent = loudness.toFixed(1);
+            
+            // Update audio parameters if playing
+            if (isPlaying) {
+                updateAudioParameters();
+            }
+        });
+        
+        // Control buttons
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        
+        startBtn.addEventListener('click', function() {
+            if (!isPlaying) {
+                startAudio();
+                isPlaying = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            }
+        });
+        
+        stopBtn.addEventListener('click', function() {
+            if (isPlaying) {
+                stopAudio();
+                isPlaying = false;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        });
+        
+        // Initialize Web Audio API
+        function startAudio() {
+            // Create audio context
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Create master gain node for overall volume control
+            const masterGain = audioContext.createGain();
+            masterGain.gain.value = loudness;
+            masterGain.connect(audioContext.destination);
+            
+            // 1. Create wind noise (brown noise)
+            createWindNoise(masterGain);
+            
+            // 2. Create silk vibration sound
+            createSilkVibration(masterGain);
+            
+            // 3. Create spider pulser sound
+            createSpiderPulser(masterGain);
+            
+            // 4. Create atmospheric turbulence
+            createTurbulence(masterGain);
+            
+            // Start visualization
+            visualize();
+        }
+        
+        function createWindNoise(outputNode) {
+            // Create brown noise by filtering white noise
+            const bufferSize = 10 * audioContext.sampleRate;
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            // Generate brown noise
+            let lastOut = 0;
+            for (let i = 0; i < bufferSize; i++) {
+                const white = Math.random() * 2 - 1;
+                lastOut = (lastOut + (0.02 * white)) / 1.02;
+                data[i] = lastOut * 3.5;
+            }
+            
+            // Create source and loop it
+            windNoise = audioContext.createBufferSource();
+            windNoise.buffer = buffer;
+            windNoise.loop = true;
+            
+            // Create low-pass filter for wind sound
+            const windFilter = audioContext.createBiquadFilter();
+            windFilter.type = 'lowpass';
+            windFilter.frequency.value = 800;
+            
+            // Create LFO to modulate wind amplitude (gusts)
+            const windLFO = audioContext.createOscillator();
+            windLFO.frequency.value = 0.05 * rate; // Slower gusts
+            
+            const windLFOGain = audioContext.createGain();
+            windLFOGain.gain.value = 0.3;
+            
+            const windGain = audioContext.createGain();
+            windGain.gain.value = 0.4;
+            
+            // Connect: windLFO -> windLFOGain -> windGain.gain
+            windLFO.connect(windLFOGain);
+            windLFOGain.connect(windGain.gain);
+            
+            // Connect: windNoise -> windFilter -> windGain -> outputNode
+            windNoise.connect(windFilter);
+            windFilter.connect(windGain);
+            windGain.connect(outputNode);
+            
+            // Start the sounds
+            windNoise.start();
+            windLFO.start();
+        }
+        
+        function createSilkVibration(outputNode) {
+            // Create primary silk vibration oscillator
+            silkOscillator = audioContext.createOscillator();
+            silkOscillator.type = 'sine';
+            silkOscillator.frequency.value = 1200;
+            
+            // Create a second oscillator for harmonic content
+            const silkOscillator2 = audioContext.createOscillator();
+            silkOscillator2.type = 'triangle';
+            silkOscillator2.frequency.value = 2400;
+            
+            // Create LFO to modulate frequency slightly (vibration effect)
+            const silkLFO = audioContext.createOscillator();
+            silkLFO.frequency.value = 8 * rate; // Vibrato rate depends on ballooning rate
+            
+            const silkLFOGain = audioContext.createGain();
+            silkLFOGain.gain.value = 30; // Frequency modulation amount
+            
+            // Create gain node for silk sound
+            const silkGain = audioContext.createGain();
+            silkGain.gain.value = 0.2;
+            
+            // Connect LFO to modulate primary oscillator frequency
+            silkLFO.connect(silkLFOGain);
+            silkLFOGain.connect(silkOscillator.frequency);
+            silkLFOGain.connect(silkOscillator2.frequency);
+            
+            // Connect oscillators to gain node
+            silkOscillator.connect(silkGain);
+            silkOscillator2.connect(silkGain);
+            
+            // Connect to output
+            silkGain.connect(outputNode);
+            
+            // Start the sounds
+            silkOscillator.start();
+            silkOscillator2.start();
+            silkLFO.start();
+        }
+        
+        function createSpiderPulser(outputNode) {
+            // Create spider pulse oscillator
+            spiderPulser = audioContext.createOscillator();
+            spiderPulser.type = 'sawtooth';
+            spiderPulser.frequency.value = 180;
+            
+            // Create pulse envelope
+            const pulseGain = audioContext.createGain();
+            pulseGain.gain.value = 0;
+            
+            // Create pulse rate based on ballooning rate
+            const pulseInterval = setInterval(() => {
+                // Create pulse envelope
+                const now = audioContext.currentTime;
+                pulseGain.gain.cancelScheduledValues(now);
+                pulseGain.gain.setValueAtTime(0, now);
+                pulseGain.gain.linearRampToValueAtTime(0.3, now + 0.05);
+                pulseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            }, 1000 / rate); // Pulse rate depends on ballooning rate
+            
+            // Store interval ID for cleanup
+            spiderPulser.intervalId = pulseInterval;
+            
+            // Connect oscillator through pulse envelope
+            spiderPulser.connect(pulseGain);
+            pulseGain.connect(outputNode);
+            
+            // Start oscillator
+            spiderPulser.start();
+        }
+        
+        function createTurbulence(outputNode) {
+            // Create noise for turbulence
+            const turbulenceNoise = audioContext.createBufferSource();
+            
+            // Create noise buffer
+            const bufferSize = 2 * audioContext.sampleRate;
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            
+            turbulenceNoise.buffer = buffer;
+            turbulenceNoise.loop = true;
+            
+            // Create bandpass filter for turbulence
+            turbulenceFilter = audioContext.createBiquadFilter();
+            turbulenceFilter.type = 'bandpass';
+            turbulenceFilter.frequency.value = 1000;
+            turbulenceFilter.Q.value = 1;
+            
+            // Create LFO to modulate filter frequency
+            const turbulenceLFO = audioContext.createOscillator();
+            turbulenceLFO.frequency.value = 0.8 * rate;
+            
+            const turbulenceLFOGain = audioContext.createGain();
+            turbulenceLFOGain.gain.value = 600; // Modulation depth
+            
+            // Create gain for turbulence
+            const turbulenceGain = audioContext.createGain();
+            turbulenceGain.gain.value = 0.15;
+            
+            // Connect LFO to modulate filter frequency
+            turbulenceLFO.connect(turbulenceLFOGain);
+            turbulenceLFOGain.connect(turbulenceFilter.frequency);
+            
+            // Connect noise through filter and gain
+            turbulenceNoise.connect(turbulenceFilter);
+            turbulenceFilter.connect(turbulenceGain);
+            turbulenceGain.connect(outputNode);
+            
+            // Start the sounds
+            turbulenceNoise.start();
+            turbulenceLFO.start();
+        }
+        
+        function updateAudioParameters() {
+            if (!audioContext) return;
+            
+            // Update master gain based on loudness
+            const masterGain = audioContext.destination;
+            
+            // Update wind LFO rate
+            // We would need to store references to all nodes to update them
+            // For simplicity, we'll just stop and restart the audio
+            stopAudio();
+            startAudio();
+        }
+        
+        function stopAudio() {
+            // Stop all audio sources
+            if (windNoise) {
+                windNoise.stop();
+                windNoise.disconnect();
+            }
+            
+            if (silkOscillator) {
+                silkOscillator.stop();
+                silkOscillator.disconnect();
+            }
+            
+            if (spiderPulser) {
+                spiderPulser.stop();
+                clearInterval(spiderPulser.intervalId);
+                spiderPulser.disconnect();
+            }
+            
+            // Stop visualization
+            cancelAnimationFrame(animationId);
+            
+            // Close audio context
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+        }
+        
+        // Visualization
+        function visualize() {
+            if (!canvas || !ctx) return;
+            
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            // Clear canvas
+            ctx.fillStyle = 'rgba(0, 10, 20, 0.2)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Draw background grid
+            ctx.strokeStyle = 'rgba(142, 197, 252, 0.1)';
+            ctx.lineWidth = 1;
+            
+            // Vertical lines
+            for (let x = 0; x < width; x += 40) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+            
+            // Horizontal lines
+            for (let y = 0; y < height; y += 40) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+                ctx.stroke();
+            }
+            
+            // Draw spider silk threads (curved lines)
+            ctx.strokeStyle = 'rgba(224, 195, 252, 0.7)';
+            ctx.lineWidth = 1.5;
+            
+            const time = Date.now() / 1000;
+            const threadCount = 5;
+            
+            for (let i = 0; i < threadCount; i++) {
+                const xOffset = (i * width / threadCount) + (Math.sin(time * 0.5 + i) * 30);
+                const yStart = 10;
+                const yEnd = height - 10;
+                
+                ctx.beginPath();
+                ctx.moveTo(xOffset, yStart);
+                
+                // Create curved thread
+                for (let y = yStart; y <= yEnd; y += 5) {
+                    const x = xOffset + Math.sin(time * rate + y * 0.02 + i) * 20;
+                    ctx.lineTo(x, y);
+                }
+                
+                ctx.stroke();
+            }
+            
+            // Draw spiders (circles moving along threads)
+            for (let i = 0; i < threadCount; i++) {
+                const xOffset = (i * width / threadCount) + (Math.sin(time * 0.5 + i) * 30);
+                const yPos = height * 0.3 + (Math.sin(time * rate * 0.7 + i * 2) * height * 0.3);
+                const xPos = xOffset + Math.sin(time * rate + yPos * 0.02 + i) * 20;
+                
+                // Spider body
+                ctx.fillStyle = '#8ec5fc';
+                ctx.beginPath();
+                ctx.arc(xPos, yPos, 6, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Spider legs
+                ctx.strokeStyle = '#e0c3fc';
+                ctx.lineWidth = 1.5;
+                
+                for (let leg = 0; leg < 8; leg++) {
+                    const angle = (leg / 8) * Math.PI * 2 + time * 2;
+                    const legLength = 10 + Math.sin(time * 5 + leg) * 3;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(xPos, yPos);
+                    ctx.lineTo(
+                        xPos + Math.cos(angle) * legLength,
+                        yPos + Math.sin(angle) * legLength
+                    );
+                    ctx.stroke();
+                }
+            }
+            
+            // Draw sound wave visualization at the bottom
+            ctx.strokeStyle = 'rgba(142, 197, 252, 0.8)';
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            const waveHeight = 30;
+            const waveBaseY = height - 40;
+            
+            for (let x = 0; x < width; x++) {
+                const y = waveBaseY + 
+                    Math.sin(x * 0.05 + time * 3) * waveHeight * 0.7 +
+                    Math.sin(x * 0.02 + time * 1.5) * waveHeight * 0.3;
+                
+                if (x === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+            
+            // Continue animation
+            animationId = requestAnimationFrame(visualize);
+        }
+        
+        // Initialize with stop button disabled
+        stopBtn.disabled = true;
+        
+        // Add some initial visualization before audio starts
+        visualize();
+    </script>
+</body>
+</html>

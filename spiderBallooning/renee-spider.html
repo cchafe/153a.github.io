@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Spider Ballooning Sonifier (Web Audio)</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: #0b0f14; color: #e8eef6;
+      display: grid; place-items: center; min-height: 100vh;
+    }
+    .card {
+      width: min(860px, 92vw); background: #121824; border: 1px solid #263148;
+      border-radius: 16px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+    h1 { font-size: 18px; margin: 0 0 14px; font-weight: 650; }
+    p { margin: 8px 0 16px; color: #b8c3d6; line-height: 1.35; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .control {
+      background: #0e1420; border: 1px solid #24304a; border-radius: 12px; padding: 14px;
+    }
+    label { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+    .value { color: #d7e1f5; font-variant-numeric: tabular-nums; }
+    input[type="range"] { width: 100%; margin-top: 10px; }
+    .buttons { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+    button {
+      border: 1px solid #2b3856; background: #172038; color: #e8eef6;
+      padding: 10px 12px; border-radius: 10px; cursor: pointer; font-weight: 600;
+    }
+    button:active { transform: translateY(1px); }
+    button.primary { background: #243a74; border-color: #3454a6; }
+    .status { margin-top: 10px; color: #aab7ce; font-size: 13px; }
+    canvas { width: 100%; height: 140px; background: #070a10; border-radius: 12px; border: 1px solid #202a3f; }
+    .footer { margin-top: 10px; font-size: 12px; color: #9fb0cc; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🕷️ Spider Ballooning Sonifier</h1>
+    <p>
+      This page generates a stream of “ballooning takeoff” events (whoosh bursts + airy noise).
+      Use <span class="mono">Rate</span> to change event density and <span class="mono">Loudness</span> for output level.
+    </p>
+
+    <div class="row">
+      <div class="control">
+        <label>
+          <span>Rate (events / sec)</span>
+          <span class="value mono" id="rateVal">0.8</span>
+        </label>
+        <input id="rate" type="range" min="0" max="8" step="0.05" value="0.8" />
+        <div class="footer">0 = no events, 8 = very active “swarm”</div>
+      </div>
+
+      <div class="control">
+        <label>
+          <span>Loudness</span>
+          <span class="value mono" id="gainVal">0.25</span>
+        </label>
+        <input id="gain" type="range" min="0" max="1" step="0.01" value="0.25" />
+        <div class="footer">Master gain (use speakers carefully)</div>
+      </div>
+    </div>
+
+    <div class="control" style="margin-top:14px;">
+      <canvas id="scope" width="1200" height="220"></canvas>
+      <div class="buttons">
+        <button class="primary" id="start">Start Audio</button>
+        <button id="stop">Stop</button>
+        <button id="burst">Single Takeoff</button>
+      </div>
+      <div class="status" id="status">Status: idle</div>
+    </div>
+
+    <div class="footer">
+      Model: Each event = short filtered noise burst with a pitch-glide bandpass “whoosh” envelope.
+      Rate is a stochastic (Poisson) process for natural irregularity.
+    </div>
+  </div>
+
+<script>
+(() => {
+  // --- UI ---
+  const rateEl = document.getElementById('rate');
+  const gainEl = document.getElementById('gain');
+  const rateVal = document.getElementById('rateVal');
+  const gainVal = document.getElementById('gainVal');
+  const statusEl = document.getElementById('status');
+
+  const startBtn = document.getElementById('start');
+  const stopBtn  = document.getElementById('stop');
+  const burstBtn = document.getElementById('burst');
+
+  const canvas = document.getElementById('scope');
+  const ctx2d = canvas.getContext('2d');
+
+  const setText = () => {
+    rateVal.textContent = (+rateEl.value).toFixed(2);
+    gainVal.textContent = (+gainEl.value).toFixed(2);
+  };
+  rateEl.addEventListener('input', setText);
+  gainEl.addEventListener('input', setText);
+  setText();
+
+  // --- Audio Graph State ---
+  let ac = null;
+  let master = null;
+  let analyser = null;
+  let running = false;
+
+  // Scheduler: Poisson process
+  let nextEventTime = 0;
+  let scheduleTimer = null;
+
+  // Noise buffer (1s) reused
+  let noiseBuffer = null;
+
+  function ensureAudio() {
+    if (ac) return;
+
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = ac.createGain();
+    master.gain.value = +gainEl.value;
+
+    // Gentle safety limiter (soft clipper via waveshaper)
+    const shaper = ac.createWaveShaper();
+    shaper.curve = makeSoftClipCurve(0.9);
+    shaper.oversample = '4x';
+
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 2048;
+
+    master.connect(shaper);
+    shaper.connect(analyser);
+    analyser.connect(ac.destination);
+
+    // Precompute white noise buffer
+    noiseBuffer = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+
+    // Update gain live
+    gainEl.addEventListener('input', () => {
+      if (!master) return;
+      // small smoothing to avoid zipper noise
+      const t = ac.currentTime;
+      master.gain.setTargetAtTime(+gainEl.value, t, 0.02);
+    });
+  }
+
+  function makeSoftClipCurve(amount) {
+    // amount in (0,1], lower = softer
+    const n = 65536;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / (n - 1) - 1;
+      // tanh soft clip
+      curve[i] = Math.tanh(x / Math.max(1e-6, amount));
+    }
+    return curve;
+  }
+
+  // --- Sonification: One "ballooning takeoff" event ---
+  function triggerTakeoff(when = ac.currentTime) {
+    // Base noise source
+    const src = ac.createBufferSource();
+    src.buffer = noiseBuffer;
+
+    // Bandpass "whoosh" (glide down slightly)
+    const bp = ac.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 6;
+
+    // Highpass to remove rumble
+    const hp = ac.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 120;
+
+    // Gentle resonant body (optional peaky)
+    const peak = ac.createBiquadFilter();
+    peak.type = 'peaking';
+    peak.frequency.value = 900;
+    peak.Q.value = 1.2;
+    peak.gain.value = 4;
+
+    // Per-event amplitude envelope
+    const env = ac.createGain();
+    env.gain.value = 0;
+
+    // Randomize event character
+    const dur = randRange(0.12, 0.45);
+    const f0 = randRange(700, 2200);
+    const f1 = f0 * randRange(0.55, 0.85); // glide down
+    const amp = randRange(0.06, 0.22);     // per-event level (master gain still applies)
+
+    // Schedule filter glide
+    bp.frequency.setValueAtTime(f0, when);
+    bp.frequency.exponentialRampToValueAtTime(f1, when + dur);
+
+    // Envelope: fast attack, slower decay
+    env.gain.setValueAtTime(0.0001, when);
+    env.gain.exponentialRampToValueAtTime(amp, when + 0.015);
+    env.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+
+    // Subtle stereo movement using panner (optional but nice)
+    const pan = ac.createStereoPanner();
+    pan.pan.setValueAtTime(randRange(-0.7, 0.7), when);
+
+    // Connect
+    src.connect(bp);
+    bp.connect(peak);
+    peak.connect(hp);
+    hp.connect(env);
+    env.connect(pan);
+    pan.connect(master);
+
+    src.start(when);
+    src.stop(when + dur + 0.02);
+  }
+
+  function randRange(a, b) { return a + Math.random() * (b - a); }
+
+  // --- Scheduler loop ---
+  function startScheduler() {
+    if (scheduleTimer) return;
+
+    const lookahead = 0.20; // seconds
+    const tickMs = 40;      // scheduler tick
+
+    nextEventTime = ac.currentTime;
+
+    scheduleTimer = setInterval(() => {
+      if (!running) return;
+
+      const rate = +rateEl.value; // events/sec
+      const now = ac.currentTime;
+
+      // If rate==0, don't schedule anything
+      if (rate <= 0) {
+        nextEventTime = now;
+        return;
+      }
+
+      // Schedule events into the lookahead window
+      while (nextEventTime < now + lookahead) {
+        // Exponential inter-arrival time for Poisson process
+        const u = Math.max(1e-6, Math.random());
+        const dt = -Math.log(u) / rate;
+        nextEventTime += dt;
+
+        // Occasionally cluster (gusts) for more "natural" motion
+        if (Math.random() < 0.12) {
+          triggerTakeoff(nextEventTime);
+          triggerTakeoff(nextEventTime + randRange(0.02, 0.08));
+        } else {
+          triggerTakeoff(nextEventTime);
+        }
+      }
+    }, tickMs);
+  }
+
+  function stopScheduler() {
+    if (scheduleTimer) clearInterval(scheduleTimer);
+    scheduleTimer = null;
+  }
+
+  // --- Oscilloscope ---
+  let rafId = null;
+  function drawScope() {
+    if (!analyser) return;
+    const buf = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(buf);
+
+    ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+    ctx2d.fillStyle = '#070a10';
+    ctx2d.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Grid
+    ctx2d.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx2d.lineWidth = 1;
+    for (let x = 0; x <= 10; x++) {
+      const xx = (x / 10) * canvas.width;
+      ctx2d.beginPath(); ctx2d.moveTo(xx, 0); ctx2d.lineTo(xx, canvas.height); ctx2d.stroke();
+    }
+    for (let y = 0; y <= 4; y++) {
+      const yy = (y / 4) * canvas.height;
+      ctx2d.beginPath(); ctx2d.moveTo(0, yy); ctx2d.lineTo(canvas.width, yy); ctx2d.stroke();
+    }
+
+    // Waveform
+    ctx2d.strokeStyle = 'rgba(232,238,246,0.85)';
+    ctx2d.lineWidth = 2;
+    ctx2d.beginPath();
+    const mid = canvas.height / 2;
+    for (let i = 0; i < buf.length; i++) {
+      const x = (i / (buf.length - 1)) * canvas.width;
+      const v = (buf[i] - 128) / 128; // -1..1
+      const y = mid + v * (canvas.height * 0.38);
+      if (i === 0) ctx2d.moveTo(x, y);
+      else ctx2d.lineTo(x, y);
+    }
+    ctx2d.stroke();
+
+    rafId = requestAnimationFrame(drawScope);
+  }
+
+  function startScope() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(drawScope);
+  }
+  function stopScope() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // --- Buttons ---
+  startBtn.addEventListener('click', async () => {
+    ensureAudio();
+    if (ac.state !== 'running') await ac.resume();
+
+    running = true;
+    startScheduler();
+    startScope();
+    statusEl.textContent = 'Status: running (sonifying ballooning)';
+  });
+
+  stopBtn.addEventListener('click', async () => {
+    running = false;
+    stopScheduler();
+    stopScope();
+    statusEl.textContent = 'Status: stopped';
+    if (ac && ac.state === 'running') {
+      // suspend saves CPU; keep graph for quick restart
+      await ac.suspend();
+    }
+  });
+
+  burstBtn.addEventListener('click', async () => {
+    ensureAudio();
+    if (ac.state !== 'running') await ac.resume();
+    triggerTakeoff(ac.currentTime);
+    statusEl.textContent = 'Status: burst triggered';
+    startScope();
+    // auto-stop scope after a moment if not running continuously
+    if (!running) setTimeout(() => { if (!running) stopScope(); }, 900);
+  });
+
+})();
+</script>
+</body>
+</html>
