@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FM Vocal Synthesizer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        
+        .controls {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .button-container {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .timeline-container {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .timeline-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #888;
+            padding: 0 10px;
+        }
+        
+        .timeline-display {
+            width: 100%;
+            height: 20px;
+            background: #444;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        
+        .timeline-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #2196F3, #FF9800, #f44336);
+            border-radius: 10px;
+            width: 0%;
+            transition: width 0.1s linear;
+            pointer-events: none;
+        }
+        
+        .timeline-marker {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #fff;
+            opacity: 0.7;
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+        }
+        
+        .timeline-marker:hover {
+            opacity: 1;
+            background: #4CAF50;
+            width: 4px;
+        }
+        
+        .timeline-marker::after {
+            content: attr(data-cue);
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        
+        .timeline-marker:hover::after {
+            opacity: 1;
+        }
+        
+        .timeline-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        
+        .current-time {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        
+        .piece-status {
+            color: #888;
+            font-size: 12px;
+        }
+        
+        .score-container {
+            width: 100%;
+            max-width: 100%;
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+        }
+        
+        .score-svg {
+            width: 100%;
+            height: auto;
+            max-width: 1400px;
+            background: white;
+            border-radius: 8px;
+        }
+        
+        .slider-container {
+            width: 100%;
+            max-width: 600px;
+        }
+        
+        .slider {
+            width: 100%;
+            height: 40px;
+            background: #444;
+            border-radius: 20px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 30px;
+            height: 30px;
+            background: #4CAF50;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 30px;
+            height: 30px;
+            background: #4CAF50;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .toggle-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            min-width: 150px;
+        }
+        
+        .toggle-btn.active {
+            background: #f44336;
+        }
+        
+        .piece-btn {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            min-width: 150px;
+        }
+        
+        .piece-btn.active {
+            background: #FF9800;
+        }
+        
+        h1 {
+            text-align: center;
+            margin: 0 0 20px 0;
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .controls {
+                padding: 15px;
+                gap: 15px;
+            }
+            
+            .button-container {
+                gap: 15px;
+            }
+            
+            .toggle-btn, .piece-btn {
+                padding: 12px 24px;
+                font-size: 14px;
+                min-width: 130px;
+            }
+            
+            .slider {
+                height: 35px;
+            }
+            
+            .slider::-webkit-slider-thumb {
+                width: 25px;
+                height: 25px;
+            }
+            
+            .slider::-moz-range-thumb {
+                width: 25px;
+                height: 25px;
+            }
+            
+            .timeline-labels {
+                font-size: 10px;
+            }
+            
+            .timeline-info {
+                font-size: 12px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                padding: 5px;
+            }
+            
+            .controls {
+                padding: 10px;
+                gap: 10px;
+            }
+            
+            .button-container {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .toggle-btn, .piece-btn {
+                padding: 10px 20px;
+                font-size: 13px;
+                min-width: 120px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>FM Vocal Synthesizer - "Ahhh" Voice</h1>
+        
+        <div class="controls">
+            <div class="button-container">
+                <button id="pieceBtn" class="piece-btn">Start Piece</button>
+                <button id="toggleBtn" class="toggle-btn">Start Audio</button>
+            </div>
+            
+            <div class="timeline-container">
+                <div class="timeline-labels">
+                    <span>-0:15</span>
+                    <span>0:00</span>
+                    <span>2:00</span>
+                    <span>4:00</span>
+                    <span>6:00</span>
+                    <span>8:00</span>
+                </div>
+                <div class="timeline-display" id="timelineDisplay">
+                    <div class="timeline-progress" id="timelineProgress"></div>
+                    <!-- Clickable cue markers -->
+                    <div class="timeline-marker" style="left: 3.03%;" data-cue="Cue 1" data-time="0"></div>
+                    <div class="timeline-marker" style="left: 9.09%;" data-cue="Cue 2" data-time="30"></div>
+                    <div class="timeline-marker" style="left: 33.33%;" data-cue="Cue 3" data-time="160"></div>
+                    <div class="timeline-marker" style="left: 42.42%;" data-cue="Cue 4" data-time="200"></div>
+                    <div class="timeline-marker" style="left: 60.61%;" data-cue="Cue 5" data-time="280"></div>
+                    <div class="timeline-marker" style="left: 72.73%;" data-cue="Cue 6" data-time="340"></div>
+                    <div class="timeline-marker" style="left: 81.82%;" data-cue="Cue 7" data-time="380"></div>
+                    <div class="timeline-marker" style="left: 87.88%;" data-cue="Cue 8" data-time="420"></div>
+                    <div class="timeline-marker" style="left: 93.94%;" data-cue="Cue 9" data-time="440"></div>
+                </div>
+                <div class="timeline-info">
+                    <div class="current-time" id="currentTime">-0:15</div>
+                    <div class="piece-status" id="pieceStatus">Ready to start</div>
+                </div>
+            </div>
+            
+            <div class="score-container">
+                <svg class="score-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1020" role="img" aria-label="Remote Control: graphical score with cue timeline and a parallel Remote Voice webapp timeline starting 15 seconds before Cue 1">
+                  <defs>
+                    <style>
+                      .bg { fill: #ffffff; }
+                      .title { font: 700 34px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111; }
+                      .subtitle { font: 500 16px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #333; }
+                      .label { font: 700 16px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111; }
+                      .text { font: 14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #222; }
+                      .small { font: 12px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #333; }
+                      .tiny { font: 11px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #444; }
+
+                      .axis { stroke: #111; stroke-width: 2; }
+                      .grid { stroke: #e5e5e5; stroke-width: 1; }
+                      .tick { stroke: #111; stroke-width: 2; }
+                      .tickMinor { stroke: #777; stroke-width: 1.5; }
+
+                      .cueLine { stroke: #111; stroke-width: 2; stroke-dasharray: 7 6; }
+                      .cueBox { fill: #f7f7f7; stroke: #111; stroke-width: 1.5; }
+                      .cueNum { font: 800 18px/1 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill: #111; }
+
+                      .curve { fill: none; stroke: #111; stroke-width: 3; }
+                      .curve2 { fill: none; stroke: #444; stroke-width: 2; }
+                      .area { fill: rgba(0,0,0,0.06); stroke: #111; stroke-width: 2; }
+                      .wave { fill: none; stroke: #111; stroke-width: 2; }
+                      .waveLite { fill: none; stroke: #555; stroke-width: 1.6; }
+                      .chaos { fill: none; stroke: #111; stroke-width: 2.2; }
+                      .arrow { stroke: #111; stroke-width: 2; fill: none; }
+
+                      .laneBox { fill: #fbfbfb; stroke: #111; stroke-width: 1.5; }
+                      .rvClick { stroke: #b00020; stroke-width: 3; }
+                      .rvFill { fill: rgba(47,111,237,0.18); stroke: #2f6fed; stroke-width: 1.5; }
+                      .rvLine { stroke: #2f6fed; stroke-width: 3; fill: none; }
+                      .warn { fill: #b00020; font: 800 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+                    </style>
+
+                    <marker id="arrowHead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                      <path d="M 0 0 L 10 5 L 0 10 z" fill="#111"/>
+                    </marker>
+                  </defs>
+
+                  <rect class="bg" x="0" y="0" width="1400" height="1020"/>
+
+                  <!-- Header -->
+                  <text class="title" x="60" y="70">Remote Control</text>
+                  <text class="subtitle" x="60" y="98">Graphical score (≈ 8 minutes). Follow cues 1–10. Parallel webapp timeline starts BEFORE cue 1 (click, then wait).</text>
+
+                  <!-- ===================== -->
+                  <!-- MAIN TIMELINE AXIS -->
+                  <!-- ===================== -->
+                  <line class="axis" x1="120" y1="760" x2="1340" y2="760"/>
+
+                  <!-- Grid: every minute -->
+                  <line class="tick" x1="120" y1="748" x2="120" y2="772"/>
+                  <text class="small" x="112" y="795">0:00</text>
+
+                  <line class="grid" x1="272.5" y1="170" x2="272.5" y2="820"/>
+                  <line class="tickMinor" x1="272.5" y1="752" x2="272.5" y2="768"/>
+                  <text class="small" x="257" y="795">1:00</text>
+
+                  <line class="grid" x1="425" y1="170" x2="425" y2="820"/>
+                  <line class="tickMinor" x1="425" y1="752" x2="425" y2="768"/>
+                  <text class="small" x="409" y="795">2:00</text>
+
+                  <line class="grid" x1="577.5" y1="170" x2="577.5" y2="820"/>
+                  <line class="tickMinor" x1="577.5" y1="752" x2="577.5" y2="768"/>
+                  <text class="small" x="561" y="795">3:00</text>
+
+                  <line class="grid" x1="730" y1="170" x2="730" y2="820"/>
+                  <line class="tickMinor" x1="730" y1="752" x2="730" y2="768"/>
+                  <text class="small" x="714" y="795">4:00</text>
+
+                  <line class="grid" x1="882.5" y1="170" x2="882.5" y2="820"/>
+                  <line class="tickMinor" x1="882.5" y1="752" x2="882.5" y2="768"/>
+                  <text class="small" x="867" y="795">5:00</text>
+
+                  <line class="grid" x1="1035" y1="170" x2="1035" y2="820"/>
+                  <line class="tickMinor" x1="1035" y1="752" x2="1035" y2="768"/>
+                  <text class="small" x="1019" y="795">6:00</text>
+
+                  <line class="grid" x1="1187.5" y1="170" x2="1187.5" y2="820"/>
+                  <line class="tickMinor" x1="1187.5" y1="752" x2="1187.5" y2="768"/>
+                  <text class="small" x="1171" y="795">7:00</text>
+
+                  <line class="tick" x1="1340" y1="748" x2="1340" y2="772"/>
+                  <text class="small" x="1324" y="795">8:00</text>
+
+                  <!-- Section labels -->
+                  <text class="label" x="60" y="165">Energy</text>
+                  <text class="tiny" x="60" y="185">(attack / shredding / density)</text>
+
+                  <text class="label" x="60" y="430">Fusion</text>
+                  <text class="tiny" x="60" y="450">(blend → fused tone → deviation)</text>
+
+                  <text class="label" x="60" y="610">Modulation</text>
+                  <text class="tiny" x="60" y="630">(rate + depth → lines/voices)</text>
+
+                  <!-- ENERGY CURVE -->
+                  <path class="area"
+                        d="M 120 250
+                           C 150 260, 170 290, 196.25 360
+                           C 215 410, 230 465, 272.5 500
+                           C 330 545, 410 560, 577.5 565
+                           C 730 570, 820 560, 882.5 540
+                           C 980 510, 1035 455, 1110 380
+                           C 1160 330, 1210 295, 1265 270
+                           C 1300 255, 1325 252, 1340 250
+                           L 1340 320
+                           C 1325 318, 1300 320, 1265 340
+                           C 1210 370, 1160 420, 1110 465
+                           C 1035 525, 980 555, 882.5 585
+                           C 820 600, 730 610, 577.5 610
+                           C 410 605, 330 595, 272.5 585
+                           C 230 575, 215 555, 196.25 520
+                           C 170 470, 150 420, 120 360
+                           Z"/>
+
+                  <path class="curve" d="M 120 250
+                           C 150 260, 170 290, 196.25 360
+                           C 215 410, 230 465, 272.5 500
+                           C 330 545, 410 560, 577.5 565
+                           C 730 570, 820 560, 882.5 540
+                           C 980 510, 1035 455, 1110 380
+                           C 1160 330, 1210 295, 1265 270
+                           C 1300 255, 1325 252, 1340 250"/>
+
+                  <!-- Fused tone band -->
+                  <rect x="196.25" y="410" width="520" height="38" fill="rgba(0,0,0,0.08)" stroke="#111" stroke-width="1.5"/>
+                  <text class="small" x="205" y="435">FUSED TONE / STILLNESS (hold "too long", verge on boring)</text>
+
+                  <!-- Modulation baseline -->
+                  <line class="curve2" x1="120" y1="660" x2="1340" y2="660"/>
+
+                  <!-- One player begins slow modulation -->
+                  <path class="waveLite"
+                        d="M 526.7 660
+                           C 545 648, 563 672, 581 660
+                           C 599 648, 617 672, 635 660
+                           C 653 648, 671 672, 689 660
+                           C 707 648, 725 672, 743 660"/>
+                  <text class="tiny" x="530" y="640">one player: very slow modulation (pitch bend / spatial / timbre)</text>
+
+                  <!-- Sea of waves -->
+                  <path class="wave"
+                        d="M 628.3 660
+                           C 640 650, 652 670, 664 660
+                           C 676 650, 688 670, 700 660
+                           C 712 650, 724 670, 736 660
+                           C 748 650, 760 670, 772 660
+                           C 784 650, 796 670, 808 660
+                           C 820 650, 832 670, 844 660"/>
+                  <path class="waveLite"
+                        d="M 628.3 675
+                           C 640 667, 652 683, 664 675
+                           C 676 667, 688 683, 700 675
+                           C 712 667, 724 683, 736 675
+                           C 748 667, 760 683, 772 675
+                           C 784 667, 796 683, 808 675
+                           C 820 667, 832 683, 844 675"/>
+                  <path class="waveLite"
+                        d="M 628.3 645
+                           C 640 637, 652 653, 664 645
+                           C 676 637, 688 653, 700 645
+                           C 712 637, 724 653, 736 645
+                           C 748 637, 760 653, 772 645
+                           C 784 637, 796 653, 808 645
+                           C 820 637, 832 653, 844 645"/>
+                  <text class="tiny" x="632" y="705">more players join → "sea" of slight waves</text>
+
+                  <!-- Increase modulation rate & depth -->
+                  <path class="wave"
+                        d="M 831.7 660
+                           C 840 630, 848 690, 856 660
+                           C 864 630, 872 690, 880 660
+                           C 888 630, 896 690, 904 660
+                           C 912 630, 920 690, 928 660
+                           C 936 630, 944 690, 952 660
+                           C 960 630, 968 690, 976 660
+                           C 984 630, 992 690, 1000 660"/>
+                  <text class="tiny" x="835" y="625">increase modulation rate + depth</text>
+
+                  <!-- Individual lines/voices -->
+                  <path class="chaos"
+                        d="M 984.2 660
+                           C 1005 620, 1020 720, 1040 650
+                           C 1060 590, 1070 730, 1090 640
+                           C 1110 610, 1120 705, 1140 645
+                           C 1160 600, 1175 720, 1190 655"/>
+                  <path class="chaos"
+                        d="M 984.2 675
+                           C 1004 700, 1022 630, 1042 680
+                           C 1062 720, 1072 620, 1092 690
+                           C 1112 710, 1122 635, 1142 685
+                           C 1162 725, 1172 615, 1190 675"/>
+                  <text class="tiny" x="990" y="735">modulations morph → individual lines/voices</text>
+
+                  <!-- Chaos hold -->
+                  <path class="chaos"
+                        d="M 1187.5 660
+                           C 1200 610, 1215 725, 1230 635
+                           C 1245 585, 1260 740, 1275 650
+                           C 1290 600, 1305 735, 1320 640
+                           C 1330 620, 1336 680, 1340 660"/>
+                  <text class="tiny" x="1190" y="610">hold chaos "just enough"</text>
+
+                  <!-- Final together cue arrow -->
+                  <line class="arrow" x1="1290" y1="585" x2="1340" y2="535" marker-end="url(#arrowHead)"/>
+                  <text class="small" x="1215" y="540">10) Finish together (conductor cue)</text>
+
+                  <!-- ===================== -->
+                  <!-- CUE LINES + ALIGNED BOXES -->
+                  <!-- ===================== -->
+
+                  <!-- Cue 1 at 0:00 -->
+                  <line class="cueLine" x1="120" y1="140" x2="120" y2="760"/>
+                  <rect class="cueBox" x="130" y="120" width="540" height="70" rx="10"/>
+                  <text class="cueNum" x="120" y="147" text-anchor="middle">1</text>
+                  <text class="text" x="150" y="147">Everyone start together: perfect ensemble attack, maximum shredding.</text>
+                  <text class="text" x="150" y="168">Immediately diminuendo + slow energy → converge on fused tone in ≈30s.</text>
+
+                  <!-- Cue 2 at 0:30 -->
+                  <line class="cueLine" x1="196.25" y1="200" x2="196.25" y2="760"/>
+                  <rect class="cueBox" x="206.25" y="205" width="520" height="55" rx="10"/>
+                  <text class="cueNum" x="196.25" y="235" text-anchor="middle">2</text>
+                  <text class="text" x="226.25" y="235">Hold fused tone perfectly still "too long" (verge on boring).</text>
+
+                  <!-- Cue 3 at ~2:40 -->
+                  <line class="cueLine" x1="526.7" y1="260" x2="526.7" y2="760"/>
+                  <rect class="cueBox" x="536.7" y="265" width="610" height="55" rx="10"/>
+                  <text class="cueNum" x="526.7" y="295" text-anchor="middle">3</text>
+                  <text class="text" x="556.7" y="295">One player only: very slow modulation (choose: pitch bend / spatial / timbre).</text>
+
+                  <!-- Cue 4 at ~3:20 -->
+                  <line class="cueLine" x1="628.3" y1="320" x2="628.3" y2="760"/>
+                  <rect class="cueBox" x="638.3" y="325" width="560" height="55" rx="10"/>
+                  <text class="cueNum" x="628.3" y="355" text-anchor="middle">4</text>
+                  <text class="text" x="658.3" y="355">More players join modulation → sea of slight modulation waves.</text>
+
+                  <!-- Cue 5 at ~4:40 -->
+                  <line class="cueLine" x1="831.7" y1="380" x2="831.7" y2="760"/>
+                  <rect class="cueBox" x="841.7" y="385" width="520" height="55" rx="10"/>
+                  <text class="cueNum" x="831.7" y="415" text-anchor="middle">5</text>
+                  <text class="text" x="861.7" y="415">Increase modulation rate + depth (still mostly sustained).</text>
+
+                  <!-- Cue 6 at ~5:40 -->
+                  <line class="cueLine" x1="984.2" y1="440" x2="984.2" y2="760"/>
+                  <rect class="cueBox" x="994.2" y="445" width="380" height="55" rx="10"/>
+                  <text class="cueNum" x="984.2" y="475" text-anchor="middle">6</text>
+                  <text class="text" x="1014.2" y="475">Modulations morph into individual lines and voices.</text>
+
+                  <!-- Cue 7 at ~6:20 -->
+                  <line class="cueLine" x1="1085.8" y1="500" x2="1085.8" y2="760"/>
+                  <rect class="cueBox" x="1095.8" y="505" width="300" height="55" rx="10"/>
+                  <text class="cueNum" x="1085.8" y="535" text-anchor="middle">7</text>
+                  <text class="text" x="1115.8" y="535">Build crescendo and increase energy.</text>
+
+                  <!-- Cue 8 at ~7:00 -->
+                  <line class="cueLine" x1="1187.5" y1="560" x2="1187.5" y2="760"/>
+                  <rect class="cueBox" x="1197.5" y="565" width="320" height="55" rx="10"/>
+                  <text class="cueNum" x="1187.5" y="595" text-anchor="middle">8</text>
+                  <text class="text" x="1217.5" y="595">Reach original energy level (maximum drive again).</text>
+
+                  <!-- Cue 9 at ~7:20 -->
+                  <line class="cueLine" x1="1238.3" y1="620" x2="1238.3" y2="760"/>
+                  <rect class="cueBox" x="1248.3" y="625" width="260" height="55" rx="10"/>
+                  <text class="cueNum" x="1238.3" y="655" text-anchor="middle">9</text>
+                  <text class="text" x="1268.3" y="655">Hold chaos "just enough", then prepare to end.</text>
+
+                  <!-- Cue 10 at 8:00 -->
+                  <line class="cueLine" x1="1340" y1="140" x2="1340" y2="760"/>
+                  <text class="cueNum" x="1340" y="147" text-anchor="middle">10</text>
+
+                  <!-- ===================== -->
+                  <!-- SIMPLIFIED REMOTE VOICE LANE -->
+                  <!-- ===================== -->
+
+                  <rect class="laneBox" x="60" y="835" width="1280" height="155" rx="12"/>
+                  <text class="label" x="80" y="865">Remote Voice (webapp)</text>
+
+                  <!-- Lane axis -->
+                  <line class="axis" x1="81.875" y1="950" x2="1340" y2="950" marker-end="url(#arrowHead)"/>
+                  <text class="tiny" x="81.875" y="972" text-anchor="middle">-0:15</text>
+                  <text class="tiny" x="120" y="972" text-anchor="middle">Cue 1</text>
+                  <text class="tiny" x="1238.3" y="972" text-anchor="middle">Cue 9</text>
+
+                  <!-- Reference ticks for cue1 and cue9 in lane -->
+                  <line class="tickMinor" x1="120" y1="942" x2="120" y2="958"/>
+                  <line class="tickMinor" x1="1238.3" y1="942" x2="1238.3" y2="958"/>
+
+                  <!-- Blue amplitude envelope -->
+                  <path class="rvFill"
+                        d="M 120 985
+                           L 145.4167 985
+                           L 196.25 910
+                           L 1160 910
+                           L 1238.3 985
+                           L 120 985 Z"/>
+                  <path class="rvLine"
+                        d="M 120 985
+                           L 145.4167 985
+                           L 196.25 910
+                           L 1160 910
+                           L 1238.3 985"/>
+
+                  <!-- Red arrow for "Click Start Audio" (after Cue 1) -->
+                  <line class="rvClick" x1="145.4167" y1="905" x2="145.4167" y2="995"/>
+                  <line class="arrow" x1="145.4167" y1="905" x2="145.4167" y2="890" marker-end="url(#arrowHead)"/>
+                  <text class="warn" x="155" y="914">Click Start Audio</text>
+
+                  <!-- Red arrow for "Stop Audio" (at end of blue envelope) -->
+                  <line class="rvClick" x1="1238.3" y1="905" x2="1238.3" y2="995"/>
+                  <line class="arrow" x1="1238.3" y1="905" x2="1238.3" y2="890" marker-end="url(#arrowHead)"/>
+                  <text class="warn" x="1248.3" y="914">Stop Audio</text>
+                </svg>
+            </div>
+            
+            <div class="slider-container">
+                <input type="range" id="masterSlider" class="slider" min="-100" max="100" value="-50">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class FMVocalSynthesizer {
+            constructor() {
+                this.audioContext = null;
+                this.isPlaying = false;
+                this.masterGain = null;
+                this.panNode = null;
+                
+                // Timeline management
+                this.pieceStarted = false;
+                this.pieceStartTime = null;
+                this.timelineInterval = null;
+                this.totalDuration = 8.25 * 60; // 8:15 total (including -15s pre-roll)
+                this.preRollDuration = 15; // 15 seconds before Cue 1
+                
+                // FM Voice Algorithm: 3 carriers + 1 shared modulator
+                this.modulator = null;
+                this.modulatorGains = []; // Separate modulation gains for each carrier
+                this.carriers = [];
+                this.carrierGains = [];
+                this.carrierFilters = [];
+                
+                // Base parameters for C3 (261.63 Hz)
+                this.baseFreq = 261.63;
+                this.baseGain = 0.75; // Center of 0.5-1.0 range
+                this.basePan = 0.0;
+                
+                // Fixed "ahhh" vowel formant frequencies and amplitudes
+                this.formantFreqs = [730, 1090, 2440]; // F1, F2, F3 for "ahhh"
+                this.formantAmps = [1.0, 0.8, 0.3];
+                
+                // Base modulation indices for each carrier
+                this.baseModIndices = [50, 30, 20];
+                this.currentModIndices = [...this.baseModIndices];
+                
+                this.setupEventListeners();
+            }
+            
+            async initAudio() {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                        sampleRate: 48000
+                    });
+                    
+                    // Create master output chain
+                    this.masterGain = this.audioContext.createGain();
+                    this.panNode = this.audioContext.createStereoPanner();
+                    
+                    // Create shared modulator at pitch frequency
+                    this.modulator = this.audioContext.createOscillator();
+                    this.modulator.type = 'sine';
+                    this.modulator.frequency.setValueAtTime(this.baseFreq, this.audioContext.currentTime);
+                    
+                    // Create 3 carriers for formant synthesis with separate modulation gains
+                    for (let i = 0; i < 3; i++) {
+                        const carrier = this.audioContext.createOscillator();
+                        const carrierGain = this.audioContext.createGain();
+                        const carrierFilter = this.audioContext.createBiquadFilter();
+                        const modulatorGain = this.audioContext.createGain();
+                        
+                        carrier.type = 'sine';
+                        carrierFilter.type = 'bandpass';
+                        carrierFilter.Q.setValueAtTime(8, this.audioContext.currentTime);
+                        
+                        // Set formant frequencies and amplitudes
+                        const formantFreq = this.formantFreqs[i];
+                        const formantAmp = this.formantAmps[i] * 0.08;
+                        
+                        carrier.frequency.setValueAtTime(formantFreq, this.audioContext.currentTime);
+                        carrierGain.gain.setValueAtTime(formantAmp, this.audioContext.currentTime);
+                        carrierFilter.frequency.setValueAtTime(formantFreq, this.audioContext.currentTime);
+                        modulatorGain.gain.setValueAtTime(this.baseModIndices[i], this.audioContext.currentTime);
+                        
+                        // Connect modulator to each carrier frequency through separate gain
+                        this.modulator.connect(modulatorGain);
+                        modulatorGain.connect(carrier.frequency);
+                        
+                        // Connect carrier through filter and gain to master
+                        carrier.connect(carrierFilter);
+                        carrierFilter.connect(carrierGain);
+                        carrierGain.connect(this.masterGain);
+                        
+                        this.carriers.push(carrier);
+                        this.carrierGains.push(carrierGain);
+                        this.carrierFilters.push(carrierFilter);
+                        this.modulatorGains.push(modulatorGain);
+                        
+                        carrier.start();
+                    }
+                    
+                    // Connect master chain
+                    this.masterGain.connect(this.panNode);
+                    this.panNode.connect(this.audioContext.destination);
+                    
+                    // Set initial values based on starting slider position
+                    const startingSliderValue = -50;
+                    this.updateParametersForAudio(startingSliderValue);
+                    
+                    // Start modulator
+                    this.modulator.start();
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Audio initialization failed:', error);
+                    return false;
+                }
+            }
+            
+            setupEventListeners() {
+                const pieceBtn = document.getElementById('pieceBtn');
+                const toggleBtn = document.getElementById('toggleBtn');
+                const masterSlider = document.getElementById('masterSlider');
+                const timelineDisplay = document.getElementById('timelineDisplay');
+                
+                pieceBtn.addEventListener('click', () => this.togglePiece());
+                toggleBtn.addEventListener('click', () => this.toggleAudio());
+                
+                // Timeline click handling
+                timelineDisplay.addEventListener('click', (e) => this.handleTimelineClick(e));
+                
+                // Cue marker click handling
+                const cueMarkers = document.querySelectorAll('.timeline-marker');
+                cueMarkers.forEach(marker => {
+                    marker.addEventListener('click', (e) => {
+                        e.stopPropagation(); // Prevent timeline click
+                        const targetTime = parseFloat(marker.dataset.time);
+                        this.jumpToTime(targetTime);
+                    });
+                });
+                
+                // Slider updates at 1ms intervals
+                let lastSliderUpdate = 0;
+                masterSlider.addEventListener('input', (e) => {
+                    const now = Date.now();
+                    if (now - lastSliderUpdate >= 1) {
+                        this.updateParameters(parseFloat(e.target.value));
+                        lastSliderUpdate = now;
+                    }
+                });
+            }
+            
+            handleTimelineClick(e) {
+                if (!this.pieceStarted) return;
+                
+                const rect = e.currentTarget.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const percentage = clickX / rect.width;
+                
+                // Convert percentage to time (relative to Cue 1)
+                const totalTimelineSeconds = this.totalDuration;
+                const elapsedSeconds = percentage * totalTimelineSeconds;
+                const timeFromCue1 = elapsedSeconds - this.preRollDuration;
+                
+                this.jumpToTime(timeFromCue1);
+            }
+            
+            jumpToTime(timeFromCue1) {
+                if (!this.pieceStarted) {
+                    // Start the piece if not already started
+                    this.togglePiece();
+                }
+                
+                // Calculate new piece start time to achieve the target time
+                const targetElapsed = timeFromCue1 + this.preRollDuration;
+                this.pieceStartTime = Date.now() - (targetElapsed * 1000);
+                
+                // Update display immediately
+                this.updateTimeline();
+            }
+            
+            togglePiece() {
+                const pieceBtn = document.getElementById('pieceBtn');
+                const pieceStatus = document.getElementById('pieceStatus');
+                
+                if (!this.pieceStarted) {
+                    this.pieceStarted = true;
+                    this.pieceStartTime = Date.now();
+                    pieceBtn.textContent = 'Stop Piece';
+                    pieceBtn.classList.add('active');
+                    pieceStatus.textContent = 'Piece running';
+                    this.startTimelineUpdate();
+                } else {
+                    this.pieceStarted = false;
+                    this.pieceStartTime = null;
+                    pieceBtn.textContent = 'Start Piece';
+                    pieceBtn.classList.remove('active');
+                    pieceStatus.textContent = 'Ready to start';
+                    this.stopTimelineUpdate();
+                    this.resetTimeline();
+                }
+            }
+            
+            async toggleAudio() {
+                const toggleBtn = document.getElementById('toggleBtn');
+                
+                if (!this.isPlaying) {
+                    const success = await this.initAudio();
+                    if (success) {
+                        this.isPlaying = true;
+                        toggleBtn.textContent = 'Stop Audio';
+                        toggleBtn.classList.add('active');
+                    }
+                } else {
+                    this.stopAudio();
+                    this.isPlaying = false;
+                    toggleBtn.textContent = 'Start Audio';
+                    toggleBtn.classList.remove('active');
+                }
+            }
+            
+            stopAudio() {
+                if (this.audioContext) {
+                    this.audioContext.close();
+                    this.audioContext = null;
+                    this.carriers = [];
+                    this.carrierGains = [];
+                    this.carrierFilters = [];
+                    this.modulatorGains = [];
+                }
+            }
+            
+            startTimelineUpdate() {
+                this.timelineInterval = setInterval(() => {
+                    this.updateTimeline();
+                }, 100); // Update every 100ms for smooth progress
+            }
+            
+            stopTimelineUpdate() {
+                if (this.timelineInterval) {
+                    clearInterval(this.timelineInterval);
+                    this.timelineInterval = null;
+                }
+            }
+            
+            updateTimeline() {
+                if (!this.pieceStarted || !this.pieceStartTime) return;
+                
+                const elapsed = (Date.now() - this.pieceStartTime) / 1000; // seconds
+                const timeFromStart = elapsed - this.preRollDuration; // relative to Cue 1 (0:00)
+                
+                // Calculate progress percentage (0-100%)
+                const progress = Math.min(100, Math.max(0, (elapsed / this.totalDuration) * 100));
+                
+                // Update progress bar
+                const progressBar = document.getElementById('timelineProgress');
+                progressBar.style.width = `${progress}%`;
+                
+                // Update time display
+                const currentTime = document.getElementById('currentTime');
+                currentTime.textContent = this.formatTime(timeFromStart);
+                
+                // Update status based on current time
+                const pieceStatus = document.getElementById('pieceStatus');
+                if (timeFromStart < 0) {
+                    pieceStatus.textContent = `Pre-roll (${Math.abs(timeFromStart).toFixed(1)}s to Cue 1)`;
+                } else if (timeFromStart >= 0 && timeFromStart < 30) {
+                    pieceStatus.textContent = 'Cue 1: Maximum attack → fused tone';
+                } else if (timeFromStart >= 30 && timeFromStart < 160) {
+                    pieceStatus.textContent = 'Cue 2: Hold fused tone';
+                } else if (timeFromStart >= 160 && timeFromStart < 200) {
+                    pieceStatus.textContent = 'Cue 3: One player modulation';
+                } else if (timeFromStart >= 200 && timeFromStart < 280) {
+                    pieceStatus.textContent = 'Cue 4: Sea of modulation waves';
+                } else if (timeFromStart >= 280 && timeFromStart < 340) {
+                    pieceStatus.textContent = 'Cue 5: Increase modulation';
+                } else if (timeFromStart >= 340 && timeFromStart < 380) {
+                    pieceStatus.textContent = 'Cue 6: Individual lines/voices';
+                } else if (timeFromStart >= 380 && timeFromStart < 420) {
+                    pieceStatus.textContent = 'Cue 7: Build crescendo';
+                } else if (timeFromStart >= 420 && timeFromStart < 440) {
+                    pieceStatus.textContent = 'Cue 8: Maximum energy';
+                } else if (timeFromStart >= 440 && timeFromStart < 480) {
+                    pieceStatus.textContent = 'Cue 9: Hold chaos';
+                } else if (timeFromStart >= 480) {
+                    pieceStatus.textContent = 'Cue 10: Finish together';
+                }
+                
+                // Auto-stop at end
+                if (elapsed >= this.totalDuration) {
+                    this.togglePiece();
+                }
+            }
+            
+            formatTime(seconds) {
+                const sign = seconds < 0 ? '-' : '';
+                const absSeconds = Math.abs(seconds);
+                const minutes = Math.floor(absSeconds / 60);
+                const secs = Math.floor(absSeconds % 60);
+                return `${sign}${minutes}:${secs.toString().padStart(2, '0')}`;
+            }
+            
+            resetTimeline() {
+                const progressBar = document.getElementById('timelineProgress');
+                const currentTime = document.getElementById('currentTime');
+                
+                progressBar.style.width = '0%';
+                currentTime.textContent = '-0:15';
+            }
+            
+            calculatePanValue(normalizedValue) {
+                // Pan mapping: L (-1) at min, R (+1) at center (0), L (-1) at max
+                // This creates a triangle wave pattern
+                if (normalizedValue <= 0) {
+                    // From -1 to 0: pan goes from -1 to +1
+                    return -1 + (normalizedValue + 1) * 2;
+                } else {
+                    // From 0 to +1: pan goes from +1 to -1
+                    return 1 - (normalizedValue * 2);
+                }
+            }
+            
+            updateParameters(sliderValue) {
+                // Apply to audio if playing
+                if (this.audioContext && this.isPlaying) {
+                    this.updateParametersForAudio(sliderValue);
+                }
+            }
+            
+            updateParametersForAudio(sliderValue) {
+                const now = this.audioContext.currentTime;
+                const rampTime = now + 0.01; // 10ms ramp for smoothness
+                
+                // Normalize slider value from -100 to +100 range
+                const normalizedValue = sliderValue / 100; // -1 to +1
+                
+                // MUCH LARGER pitch variation (±150 Hz)
+                const pitchOffset = normalizedValue * 150;
+                const newFreq = Math.max(50, this.baseFreq + pitchOffset);
+                
+                // Update modulator frequency (fundamental)
+                this.modulator.frequency.exponentialRampToValueAtTime(newFreq, rampTime);
+                
+                // Loudness variation between 0.5 and 1.0 (range of 0.5)
+                const gainOffset = normalizedValue * 0.25; // ±0.25 around center of 0.75
+                const newGain = Math.max(0.5, Math.min(1.0, this.baseGain + gainOffset));
+                this.masterGain.gain.exponentialRampToValueAtTime(newGain, rampTime);
+                
+                // Triangle wave panning: L → R → L
+                const newPan = this.calculatePanValue(normalizedValue);
+                this.panNode.pan.setValueAtTime(newPan, rampTime);
+                
+                // Different non-parallel mappings for each carrier's modulation index
+                // DOUBLED the maximum ranges for more extreme FM effects
+                const mod1 = Math.max(1, this.baseModIndices[0] + (normalizedValue * 400));
+                const mod2 = Math.max(1, this.baseModIndices[1] + (Math.sign(normalizedValue) * Math.pow(Math.abs(normalizedValue), 1.5) * 300));
+                const mod3 = Math.max(1, this.baseModIndices[2] + (Math.sin(normalizedValue * Math.PI) * 200) - (normalizedValue * 100));
+                
+                // Update modulation indices
+                this.modulatorGains[0].gain.exponentialRampToValueAtTime(mod1, rampTime);
+                this.modulatorGains[1].gain.exponentialRampToValueAtTime(mod2, rampTime);
+                this.modulatorGains[2].gain.exponentialRampToValueAtTime(mod3, rampTime);
+                
+                // Update carrier frequencies slightly based on pitch
+                for (let i = 0; i < 3; i++) {
+                    const carrierFreq = Math.max(20, this.formantFreqs[i] + (pitchOffset * 0.5));
+                    this.carriers[i].frequency.exponentialRampToValueAtTime(carrierFreq, rampTime);
+                    this.carrierFilters[i].frequency.exponentialRampToValueAtTime(carrierFreq, rampTime);
+                }
+            }
+        }
+        
+        // Initialize the synthesizer when page loads
+        window.addEventListener('load', () => {
+            new FMVocalSynthesizer();
+        });
+    </script>
+</body>
+</html>
+
