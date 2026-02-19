@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Life in the Boundary Layer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Courier+Prime:ital@0;1&display=swap');
+
+  :root {
+    --stone: #2a2620;
+    --lichen: #4a5240;
+    --moss: #6b7a5a;
+    --spore: #b8c4a0;
+    --dew: #d4e0c8;
+    --air: #e8f0e0;
+    --mist: #c8d4bc88;
+    --gold: #c8a84b;
+    --amber: #8a6020;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--stone);
+    color: var(--spore);
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    cursor: default;
+  }
+
+  /* Layered background texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 120% 40% at 50% 100%, #3d4a2e44 0%, transparent 60%),
+      radial-gradient(ellipse 80% 30% at 20% 80%, #4a3d2a22 0%, transparent 50%),
+      radial-gradient(ellipse 60% 20% at 80% 90%, #2a3d2a33 0%, transparent 40%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Grain overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 4rem 2.5rem 6rem;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 5rem;
+  }
+
+  .eyebrow {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--moss);
+    margin-bottom: 1.5rem;
+  }
+
+  h1 {
+    font-size: clamp(2.2rem, 6vw, 3.8rem);
+    font-weight: 300;
+    line-height: 1.15;
+    color: var(--dew);
+    letter-spacing: -0.01em;
+    margin-bottom: 0.5rem;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--spore);
+  }
+
+  .subtitle {
+    font-style: italic;
+    font-size: 1rem;
+    color: var(--moss);
+    margin-top: 1rem;
+    letter-spacing: 0.02em;
+  }
+
+  /* Layers visualization */
+  .layers-diagram {
+    position: relative;
+    height: 180px;
+    margin: 3.5rem 0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .layer {
+    position: absolute;
+    left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    transition: opacity 0.8s ease;
+  }
+
+  .layer-label {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    min-width: 120px;
+    text-align: right;
+    padding-right: 1rem;
+  }
+
+  .layer-flow {
+    flex: 1;
+    height: 2px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Laminar flow — fast, smooth */
+  .layer-laminar {
+    top: 10px;
+    height: 40px;
+    background: linear-gradient(180deg, #3d4a2e00, #3d4a2e18);
+  }
+  .layer-laminar .layer-label { color: var(--moss); opacity: 0.6; }
+  .layer-laminar .layer-flow { background: linear-gradient(90deg, transparent, #b8c4a044, transparent); }
+
+  /* Turbulent zone */
+  .layer-turbulent {
+    top: 55px;
+    height: 60px;
+    background: linear-gradient(180deg, #3d4a2e18, #4a5240aa);
+  }
+  .layer-turbulent .layer-label { color: var(--spore); opacity: 0.8; }
+
+  /* Boundary layer — moss lives here */
+  .layer-boundary {
+    top: 115px;
+    height: 45px;
+    background: linear-gradient(180deg, #4a524088, #6b7a5a55);
+  }
+  .layer-boundary .layer-label { color: var(--dew); font-weight: bold; }
+
+  /* Stone surface */
+  .layer-surface {
+    bottom: 0;
+    height: 20px;
+    background: linear-gradient(180deg, #2a2620aa, #1a1a14);
+    left: 0; right: 0;
+    top: auto;
+  }
+  .layer-surface .layer-label { color: var(--amber); }
+
+  /* Animated particles for each layer */
+  .particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  canvas.layer-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Controls */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 3rem 0;
+  }
+
+  @media (max-width: 560px) {
+    .controls { grid-template-columns: 1fr; }
+  }
+
+  .voice-card {
+    background: #1e1e18;
+    border: 1px solid #3a3a2a;
+    border-radius: 2px;
+    padding: 1.25rem 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .voice-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--lichen)00, var(--lichen)11);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .voice-card:hover::before { opacity: 1; }
+
+  .voice-card.active {
+    border-color: var(--moss);
+    background: #252520;
+  }
+
+  .voice-card.active::before { opacity: 1; }
+
+  .voice-title {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--moss);
+    margin-bottom: 0.4rem;
+  }
+
+  .voice-name {
+    font-size: 1.1rem;
+    font-weight: 300;
+    color: var(--dew);
+    margin-bottom: 0.3rem;
+  }
+
+  .voice-desc {
+    font-style: italic;
+    font-size: 0.8rem;
+    color: #7a8a6a;
+    line-height: 1.5;
+  }
+
+  .voice-indicator {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--moss);
+    opacity: 0;
+    transition: opacity 0.3s;
+    box-shadow: 0 0 8px var(--moss);
+  }
+
+  .voice-card.active .voice-indicator { opacity: 1; }
+
+  /* Big play button */
+  .play-section {
+    text-align: center;
+    margin: 2.5rem 0;
+  }
+
+  .play-btn {
+    background: none;
+    border: 1px solid var(--moss);
+    color: var(--dew);
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1rem;
+    font-weight: 300;
+    letter-spacing: 0.15em;
+    padding: 1rem 3rem;
+    cursor: pointer;
+    transition: all 0.4s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .play-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--moss);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.4s ease;
+    z-index: -1;
+  }
+
+  .play-btn:hover { color: var(--stone); }
+  .play-btn:hover::before { transform: scaleX(1); }
+
+  .play-btn.playing {
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+
+  /* Sliders */
+  .params {
+    margin: 2.5rem 0;
+    border-top: 1px solid #2a2a20;
+    padding-top: 2rem;
+  }
+
+  .params-title {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--lichen);
+    margin-bottom: 1.5rem;
+  }
+
+  .param-row {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    margin-bottom: 1rem;
+  }
+
+  .param-label {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    color: #6a7a5a;
+    min-width: 100px;
+    text-transform: uppercase;
+  }
+
+  input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 1px;
+    background: #3a3a2a;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--moss);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  input[type=range]::-webkit-slider-thumb:hover {
+    background: var(--spore);
+  }
+
+  .param-val {
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.6rem;
+    color: var(--moss);
+    min-width: 36px;
+    text-align: right;
+  }
+
+  /* VU meter */
+  .meters {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    height: 50px;
+    align-items: flex-end;
+    margin: 1rem 0;
+  }
+
+  .meter-bar {
+    width: 4px;
+    background: var(--lichen);
+    transition: height 0.08s ease;
+    border-radius: 1px 1px 0 0;
+    min-height: 2px;
+  }
+
+  /* Quote */
+  .quote {
+    border-left: 2px solid var(--lichen);
+    padding: 1.5rem 2rem;
+    margin: 3rem 0;
+    font-style: italic;
+    color: #8a9a7a;
+    font-size: 0.95rem;
+    line-height: 1.7;
+  }
+
+  .quote-attr {
+    font-style: normal;
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    color: var(--lichen);
+    margin-top: 0.8rem;
+    display: block;
+  }
+
+  /* Moss spore visualizer */
+  #spore-canvas {
+    display: block;
+    width: 100%;
+    height: 120px;
+    margin: 2rem 0;
+    opacity: 0.7;
+  }
+
+  footer {
+    text-align: center;
+    font-family: 'Courier Prime', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.15em;
+    color: #3a3a2a;
+    padding-top: 3rem;
+    text-transform: uppercase;
+  }
+
+  /* Active glow animation */
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 #6b7a5a00; }
+    50% { box-shadow: 0 0 20px 4px #6b7a5a44; }
+  }
+
+  .voice-card.active {
+    animation: pulse-glow 3s ease-in-out infinite;
+  }
+
+  .layer-active-marker {
+    position: absolute;
+    left: 0;
+    top: 0; bottom: 0;
+    width: 3px;
+    background: var(--gold);
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <header>
+    <p class="eyebrow">Robin Wall Kimmerer · Gathering Moss · 2003</p>
+    <h1>Life in the<br><em>Boundary Layer</em></h1>
+    <p class="subtitle">a sonification for FM voices, stereo field & reverb</p>
+  </header>
+
+  <!-- Atmospheric layer diagram with animated canvas -->
+  <canvas id="layer-canvas" class="layer-canvas" style="width:100%;height:180px;display:block;border-radius:4px;"></canvas>
+
+  <div class="quote">
+    Kites were made for the airy zone of laminar flow; mosses were made for the boundary layer.
+    <span class="quote-attr">— Robin Wall Kimmerer</span>
+  </div>
+
+  <!-- Voice selector -->
+  <div class="controls" id="voice-cards"></div>
+
+  <!-- Spore visualizer -->
+  <canvas id="spore-canvas"></canvas>
+
+  <!-- VU meters -->
+  <div class="meters" id="meters"></div>
+
+  <!-- Play -->
+  <div class="play-section">
+    <button class="play-btn" id="play-btn">BEGIN · INHABIT THE SURFACE</button>
+  </div>
+
+  <!-- Parameters -->
+  <div class="params">
+    <p class="params-title">Microclimate controls</p>
+
+    <div class="param-row">
+      <span class="param-label">Humidity</span>
+      <input type="range" id="p-reverb" min="0" max="1" step="0.01" value="0.65">
+      <span class="param-val" id="v-reverb">0.65</span>
+    </div>
+    <div class="param-row">
+      <span class="param-label">Wind speed</span>
+      <input type="range" id="p-pan-rate" min="0.01" max="1.2" step="0.01" value="0.18">
+      <span class="param-val" id="v-pan-rate">0.18</span>
+    </div>
+    <div class="param-row">
+      <span class="param-label">Warmth</span>
+      <input type="range" id="p-mod-idx" min="0.5" max="12" step="0.1" value="4.5">
+      <span class="param-val" id="v-mod-idx">4.50</span>
+    </div>
+    <div class="param-row">
+      <span class="param-label">Density</span>
+      <input type="range" id="p-voices" min="1" max="8" step="1" value="4">
+      <span class="param-val" id="v-voices">4</span>
+    </div>
+    <div class="param-row">
+      <span class="param-label">Spore drift</span>
+      <input type="range" id="p-detune" min="0" max="30" step="0.5" value="8">
+      <span class="param-val" id="v-detune">8.0</span>
+    </div>
+  </div>
+
+  <footer>fm vocal synthesis · web audio api · stereo reverb · boundary layer ecology</footer>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// VOICE PRESETS — each a different moss character
+// ─────────────────────────────────────────────
+const VOICES = [
+  {
+    id: 'still-air',
+    title: 'stratum i',
+    name: 'Still Air',
+    desc: 'The perfectly motionless layer captured by surface friction. Warm, insulating, barely breathing.',
+    baseFreqs: [82, 110, 138, 164],
+    ratios: [1, 1.5, 2, 3],
+    modIndex: 2.5,
+    filterCutoff: 600,
+    filterQ: 1.2,
+    attack: 4.0,
+    release: 5.0,
+    panAmp: 0.2,
+    panRate: 0.05,
+    gain: 0.18,
+    formants: [200, 700, 2200]
+  },
+  {
+    id: 'dew',
+    title: 'stratum ii',
+    name: 'Dew Formation',
+    desc: 'Condensation at the air-rock interface. Thin films of water collecting in night\'s temperature differential.',
+    baseFreqs: [220, 277, 330, 415],
+    ratios: [1, 2, 3, 4],
+    modIndex: 6.5,
+    filterCutoff: 2800,
+    filterQ: 3.5,
+    attack: 2.5,
+    release: 3.5,
+    panAmp: 0.5,
+    panRate: 0.12,
+    gain: 0.12,
+    formants: [800, 1200, 2800]
+  },
+  {
+    id: 'spore-release',
+    title: 'stratum iii',
+    name: 'Spore Release',
+    desc: 'Sporophytes thrust upward on long setae into the turbulent zone. Tiny propagules carried off to new habitats.',
+    baseFreqs: [440, 523, 659, 784],
+    ratios: [1, 1.333, 1.5, 2],
+    modIndex: 9,
+    filterCutoff: 5000,
+    filterQ: 2,
+    attack: 0.8,
+    release: 2.0,
+    panAmp: 0.85,
+    panRate: 0.6,
+    gain: 0.1,
+    formants: [500, 1500, 3500]
+  },
+  {
+    id: 'decomposition',
+    title: 'stratum iv',
+    name: 'Decomposers',
+    desc: 'Fungi and bacteria in the log releasing CO₂ — the boundary layer enriched tenfold with raw photosynthetic material.',
+    baseFreqs: [55, 73, 82, 98],
+    ratios: [1, 1.25, 1.5, 2],
+    modIndex: 3.5,
+    filterCutoff: 350,
+    filterQ: 0.8,
+    attack: 6.0,
+    release: 8.0,
+    panAmp: 0.15,
+    panRate: 0.03,
+    gain: 0.22,
+    formants: [250, 500, 1000]
+  }
+];
+
+// ─────────────────────────────────────────────
+// RENDER VOICE CARDS
+// ─────────────────────────────────────────────
+let activeVoiceIdx = 0;
+const cardsEl = document.getElementById('voice-cards');
+VOICES.forEach((v, i) => {
+  const card = document.createElement('div');
+  card.className = 'voice-card' + (i === 0 ? ' active' : '');
+  card.innerHTML = `
+    <div class="layer-active-marker"></div>
+    <div class="voice-title">${v.title}</div>
+    <div class="voice-name">${v.name}</div>
+    <div class="voice-desc">${v.desc}</div>
+    <div class="voice-indicator"></div>
+  `;
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    activeVoiceIdx = i;
+    if (isPlaying) restartSynth();
+  });
+  cardsEl.appendChild(card);
+});
+
+// ─────────────────────────────────────────────
+// VU METERS
+// ─────────────────────────────────────────────
+const metersEl = document.getElementById('meters');
+const N_BARS = 32;
+const bars = [];
+for (let i = 0; i < N_BARS; i++) {
+  const b = document.createElement('div');
+  b.className = 'meter-bar';
+  b.style.height = '2px';
+  metersEl.appendChild(b);
+  bars.push(b);
+}
+
+// ─────────────────────────────────────────────
+// AUDIO ENGINE
+// ─────────────────────────────────────────────
+let ctx = null;
+let isPlaying = false;
+let synthNodes = [];
+let analyser = null;
+let masterGain = null;
+let panLFOs = [];
+let animFrame = null;
+
+// Stereo reverb via convolver + feedback delay network
+function buildReverb(ctx, amount) {
+  const convolver = ctx.createConvolver();
+  const length = ctx.sampleRate * 4.5;
+  const buf = ctx.createBuffer(2, length, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < length; i++) {
+      // Exponential decay with early reflections
+      const decay = Math.pow(1 - i / length, 2.5 + amount * 3);
+      const earlyBoost = i < ctx.sampleRate * 0.05 ? 1.5 : 1;
+      d[i] = (Math.random() * 2 - 1) * decay * earlyBoost;
+    }
+  }
+  convolver.buffer = buf;
+
+  // Pre-delay
+  const preDelay = ctx.createDelay(0.1);
+  preDelay.delayTime.value = 0.018 + amount * 0.03;
+
+  // Wet/dry
+  const wetGain = ctx.createGain();
+  const dryGain = ctx.createGain();
+  wetGain.gain.value = amount * 0.7;
+  dryGain.gain.value = 1 - amount * 0.3;
+
+  const inputNode = ctx.createGain();
+  const outputNode = ctx.createGain();
+
+  inputNode.connect(preDelay);
+  preDelay.connect(convolver);
+  convolver.connect(wetGain);
+  wetGain.connect(outputNode);
+  inputNode.connect(dryGain);
+  dryGain.connect(outputNode);
+
+  return { input: inputNode, output: outputNode };
+}
+
+// FM voice with formant shaping
+function buildFMVoice(ctx, preset, voiceParams) {
+  const { baseFreqs, ratios, modIndex, filterCutoff, filterQ, attack, release, panAmp, panRate, gain, formants } = preset;
+  const numVoices = parseInt(voiceParams.voices);
+  const detuneAmt = parseFloat(voiceParams.detune);
+  const modIdxOverride = parseFloat(voiceParams.modIdx);
+  const panRateOverride = parseFloat(voiceParams.panRate);
+
+  const voiceGroup = [];
+
+  for (let v = 0; v < numVoices; v++) {
+    const freqIdx = v % baseFreqs.length;
+    const baseF = baseFreqs[freqIdx];
+    const detune = (Math.random() - 0.5) * detuneAmt;
+    const carrierF = baseF + detune;
+
+    // Carrier oscillator
+    const carrier = ctx.createOscillator();
+    carrier.type = 'sine';
+    carrier.frequency.value = carrierF;
+
+    // Modulator
+    const modOsc = ctx.createOscillator();
+    const modRatio = ratios[v % ratios.length];
+    modOsc.type = 'sine';
+    modOsc.frequency.value = carrierF * modRatio + (Math.random() - 0.5) * 0.5;
+
+    // Modulation depth (index)
+    const modGain = ctx.createGain();
+    modGain.gain.value = carrierF * (modIdxOverride !== undefined ? modIdxOverride : modIndex);
+
+    // Formant filter chain
+    const filters = formants.map((f, fi) => {
+      const bpf = ctx.createBiquadFilter();
+      bpf.type = 'bandpass';
+      bpf.frequency.value = f;
+      bpf.Q.value = 2.5 + fi * 1.5;
+      return bpf;
+    });
+
+    // Lowpass for overall brightness
+    const lpf = ctx.createBiquadFilter();
+    lpf.type = 'lowpass';
+    lpf.frequency.value = filterCutoff;
+    lpf.Q.value = filterQ;
+
+    // Amplitude envelope
+    const ampEnv = ctx.createGain();
+    ampEnv.gain.setValueAtTime(0, ctx.currentTime);
+    const attackTime = attack * (0.7 + Math.random() * 0.6);
+    ampEnv.gain.linearRampToValueAtTime(gain / numVoices, ctx.currentTime + attackTime);
+
+    // Slow AM for organic breathing
+    const amOsc = ctx.createOscillator();
+    amOsc.frequency.value = 0.05 + Math.random() * 0.15;
+    amOsc.type = 'sine';
+    const amGain = ctx.createGain();
+    amGain.gain.value = 0.12;
+    const amOffset = ctx.createGain();
+    amOffset.gain.value = 1;
+
+    // Stereo panner with LFO
+    const panner = ctx.createStereoPanner();
+    const panOsc = ctx.createOscillator();
+    panOsc.type = 'sine';
+    panOsc.frequency.value = (panRateOverride || panRate) * (0.7 + Math.random() * 0.6);
+    const panGainNode = ctx.createGain();
+    panGainNode.gain.value = panAmp * (0.5 + Math.random() * 0.5);
+
+    // Connect modulation chain
+    modOsc.connect(modGain);
+    modGain.connect(carrier.frequency);
+
+    // Connect filter chain (parallel formants + lowpass)
+    const filterMix = ctx.createGain();
+    filterMix.gain.value = 0.5;
+    filters.forEach(f => {
+      carrier.connect(f);
+      f.connect(filterMix);
+    });
+    carrier.connect(lpf);
+    lpf.connect(filterMix);
+
+    // AM
+    amOsc.connect(amGain);
+    amGain.connect(amOffset.gain);
+    filterMix.connect(amOffset);
+
+    // Pan LFO
+    panOsc.connect(panGainNode);
+    panGainNode.connect(panner.pan);
+
+    // Amp envelope
+    amOffset.connect(ampEnv);
+    ampEnv.connect(panner);
+
+    voiceGroup.push({ carrier, modOsc, amOsc, panOsc, ampEnv, panner, release });
+  }
+
+  return voiceGroup;
+}
+
+function getVoiceParams() {
+  return {
+    reverb: parseFloat(document.getElementById('p-reverb').value),
+    panRate: parseFloat(document.getElementById('p-pan-rate').value),
+    modIdx: parseFloat(document.getElementById('p-mod-idx').value),
+    voices: parseInt(document.getElementById('p-voices').value),
+    detune: parseFloat(document.getElementById('p-detune').value),
+  };
+}
+
+function startSynth() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const params = getVoiceParams();
+  const preset = VOICES[activeVoiceIdx];
+
+  masterGain = ctx.createGain();
+  masterGain.gain.value = 0;
+
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 64;
+
+  const reverb = buildReverb(ctx, params.reverb);
+  masterGain.connect(reverb.input);
+  reverb.output.connect(analyser);
+  analyser.connect(ctx.destination);
+
+  masterGain.gain.linearRampToValueAtTime(1, ctx.currentTime + 2);
+
+  const voices = buildFMVoice(ctx, preset, params);
+  voices.forEach(v => {
+    v.carrier.start();
+    v.modOsc.start();
+    v.amOsc.start();
+    v.panOsc.start();
+    v.panner.connect(masterGain);
+  });
+  synthNodes = voices;
+  isPlaying = true;
+
+  document.getElementById('play-btn').textContent = 'CEASE · RETURN TO ATMOSPHERE';
+  document.getElementById('play-btn').classList.add('playing');
+
+  startViz();
+}
+
+function stopSynth() {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+
+  synthNodes.forEach(v => {
+    try {
+      v.ampEnv.gain.cancelScheduledValues(now);
+      v.ampEnv.gain.setValueAtTime(v.ampEnv.gain.value, now);
+      v.ampEnv.gain.linearRampToValueAtTime(0, now + (v.release || 3));
+      setTimeout(() => {
+        try { v.carrier.stop(); v.modOsc.stop(); v.amOsc.stop(); v.panOsc.stop(); } catch(e){}
+      }, (v.release || 3) * 1000 + 500);
+    } catch(e){}
+  });
+
+  masterGain.gain.linearRampToValueAtTime(0, now + 3);
+  setTimeout(() => { try { ctx.close(); } catch(e){} ctx = null; }, 4000);
+
+  synthNodes = [];
+  isPlaying = false;
+  cancelAnimationFrame(animFrame);
+
+  document.getElementById('play-btn').textContent = 'BEGIN · INHABIT THE SURFACE';
+  document.getElementById('play-btn').classList.remove('playing');
+  bars.forEach(b => b.style.height = '2px');
+}
+
+function restartSynth() {
+  stopSynth();
+  setTimeout(() => startSynth(), 500);
+}
+
+document.getElementById('play-btn').addEventListener('click', () => {
+  if (isPlaying) stopSynth();
+  else startSynth();
+});
+
+// ─────────────────────────────────────────────
+// SLIDER LIVE UPDATE
+// ─────────────────────────────────────────────
+[
+  ['p-reverb', 'v-reverb', 2],
+  ['p-pan-rate', 'v-pan-rate', 2],
+  ['p-mod-idx', 'v-mod-idx', 2],
+  ['p-voices', 'v-voices', 0],
+  ['p-detune', 'v-detune', 1],
+].forEach(([sid, vid, dp]) => {
+  const s = document.getElementById(sid);
+  const v = document.getElementById(vid);
+  s.addEventListener('input', () => {
+    v.textContent = parseFloat(s.value).toFixed(dp);
+    if (isPlaying && (sid === 'p-voices' || sid === 'p-reverb')) restartSynth();
+    else if (isPlaying && ctx) applyLiveParams();
+  });
+});
+
+function applyLiveParams() {
+  if (!ctx || !synthNodes.length) return;
+  const params = getVoiceParams();
+  const preset = VOICES[activeVoiceIdx];
+  synthNodes.forEach((v, i) => {
+    const baseF = preset.baseFreqs[i % preset.baseFreqs.length];
+    const newModF = baseF * preset.ratios[i % preset.ratios.length];
+    try {
+      v.modOsc.frequency.linearRampToValueAtTime(newModF, ctx.currentTime + 0.5);
+    } catch(e){}
+  });
+}
+
+// ─────────────────────────────────────────────
+// VISUALIZATION
+// ─────────────────────────────────────────────
+function startViz() {
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  function frame() {
+    animFrame = requestAnimationFrame(frame);
+    analyser.getByteFrequencyData(data);
+    bars.forEach((b, i) => {
+      const v = data[i] || 0;
+      const h = 2 + (v / 255) * 48;
+      b.style.height = h + 'px';
+      const g = Math.floor(90 + v * 0.3);
+      b.style.background = `rgb(${Math.floor(40+v*0.1)}, ${g}, ${Math.floor(60+v*0.15)})`;
+    });
+    drawSpores(data);
+    drawLayers(data);
+  }
+  frame();
+}
+
+// ─────────────────────────────────────────────
+// SPORE CANVAS
+// ─────────────────────────────────────────────
+const sporeCanvas = document.getElementById('spore-canvas');
+const sporeCtx = sporeCanvas.getContext('2d');
+let spores = [];
+let sporeTime = 0;
+
+function initSporeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  sporeCanvas.width = sporeCanvas.offsetWidth * dpr;
+  sporeCanvas.height = sporeCanvas.offsetHeight * dpr;
+  sporeCtx.scale(dpr, dpr);
+}
+window.addEventListener('resize', initSporeCanvas);
+initSporeCanvas();
+
+function drawSpores(freqData) {
+  const W = sporeCanvas.offsetWidth;
+  const H = sporeCanvas.offsetHeight;
+  sporeCtx.clearRect(0, 0, W, H);
+  sporeTime += 0.016;
+
+  // spawn spores based on energy
+  const energy = freqData ? freqData.reduce((a, b) => a + b, 0) / freqData.length : 20;
+  if (Math.random() < 0.04 + energy / 4000) {
+    spores.push({
+      x: W * 0.3 + Math.random() * W * 0.4,
+      y: H * 0.85,
+      vx: (Math.random() - 0.5) * 1.2,
+      vy: -(0.3 + Math.random() * 0.6),
+      life: 1,
+      r: 0.8 + Math.random() * 1.5,
+      wobble: Math.random() * Math.PI * 2,
+      wobbleSpeed: 0.02 + Math.random() * 0.04,
+    });
+  }
+
+  // Draw stone surface gradient
+  const grad = sporeCtx.createLinearGradient(0, H * 0.7, 0, H);
+  grad.addColorStop(0, '#4a5240aa');
+  grad.addColorStop(1, '#1a1a14');
+  sporeCtx.fillStyle = grad;
+  sporeCtx.fillRect(0, H * 0.7, W, H * 0.3);
+
+  // Boundary layer shimmer
+  const blGrad = sporeCtx.createLinearGradient(0, H * 0.55, 0, H * 0.75);
+  blGrad.addColorStop(0, '#6b7a5a00');
+  blGrad.addColorStop(0.5, '#6b7a5a22');
+  blGrad.addColorStop(1, '#6b7a5a44');
+  sporeCtx.fillStyle = blGrad;
+  sporeCtx.fillRect(0, H * 0.55, W, H * 0.2);
+
+  // Moss texture at base
+  for (let mx = 0; mx < W; mx += 3) {
+    const h = 5 + Math.sin(mx * 0.15 + sporeTime * 0.3) * 3 + Math.sin(mx * 0.3 + sporeTime * 0.1) * 2;
+    const brightness = 60 + Math.floor(Math.sin(mx * 0.2) * 15);
+    sporeCtx.fillStyle = `rgba(80, ${brightness}, 60, 0.6)`;
+    sporeCtx.fillRect(mx, H * 0.72 - h, 2, h);
+  }
+
+  // Update and draw spores
+  spores = spores.filter(s => s.life > 0);
+  spores.forEach(s => {
+    s.x += s.vx + Math.sin(s.wobble) * 0.4;
+    s.y += s.vy;
+    s.wobble += s.wobbleSpeed;
+    s.life -= 0.006;
+    s.vy *= 0.995;
+
+    const alpha = s.life * 0.8;
+    sporeCtx.beginPath();
+    sporeCtx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    sporeCtx.fillStyle = `rgba(184, 196, 160, ${alpha})`;
+    sporeCtx.fill();
+  });
+
+  // Dew drop condensation
+  for (let dx = 20; dx < W; dx += 60 + Math.sin(dx) * 20) {
+    const alpha = 0.1 + 0.05 * Math.sin(sporeTime * 0.3 + dx);
+    const dSize = 1.5 + Math.sin(sporeTime * 0.5 + dx * 0.1) * 0.5;
+    sporeCtx.beginPath();
+    sporeCtx.arc(dx + Math.sin(sporeTime * 0.2 + dx) * 3, H * 0.71, dSize, 0, Math.PI * 2);
+    sporeCtx.fillStyle = `rgba(212, 224, 200, ${alpha})`;
+    sporeCtx.fill();
+  }
+}
+
+// ─────────────────────────────────────────────
+// LAYERS CANVAS
+// ─────────────────────────────────────────────
+const layerCanvas = document.getElementById('layer-canvas');
+const layerCtx = layerCanvas.getContext('2d');
+let layerTime = 0;
+
+function initLayerCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  layerCanvas.width = layerCanvas.offsetWidth * dpr;
+  layerCanvas.height = layerCanvas.offsetHeight * dpr;
+  layerCtx.scale(dpr, dpr);
+}
+window.addEventListener('resize', initLayerCanvas);
+initLayerCanvas();
+
+function drawLayers(freqData) {
+  const W = layerCanvas.offsetWidth;
+  const H = layerCanvas.offsetHeight;
+  layerCtx.clearRect(0, 0, W, H);
+  layerTime += 0.012;
+
+  const energy = freqData ? freqData.reduce((a, b) => a + b, 0) / freqData.length : 10;
+
+  // Background
+  const bg = layerCtx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#1e2018');
+  bg.addColorStop(0.5, '#252820');
+  bg.addColorStop(1, '#1a1c14');
+  layerCtx.fillStyle = bg;
+  layerCtx.fillRect(0, 0, W, H);
+
+  // LAMINAR FLOW (top ~35%)
+  {
+    const y0 = H * 0;
+    const y1 = H * 0.35;
+    for (let line = 0; line < 4; line++) {
+      const yLine = y0 + (y1 - y0) * (line + 1) / 5;
+      layerCtx.beginPath();
+      layerCtx.moveTo(0, yLine);
+      for (let x = 0; x <= W; x += 5) {
+        const offset = Math.sin(x * 0.01 + layerTime * 2.2 - line * 0.5) * 1.5;
+        layerCtx.lineTo(x, yLine + offset);
+      }
+      const alpha = 0.15 + line * 0.05;
+      layerCtx.strokeStyle = `rgba(184,196,160,${alpha})`;
+      layerCtx.lineWidth = 0.8;
+      layerCtx.stroke();
+    }
+    layerCtx.fillStyle = 'rgba(184,196,160,0.35)';
+    layerCtx.font = '500 9px "Courier Prime", monospace';
+    layerCtx.letterSpacing = '0.12em';
+    layerCtx.fillText('LAMINAR FLOW', W - 140, H * 0.08);
+  }
+
+  // TURBULENT ZONE (35–65%)
+  {
+    const y0 = H * 0.35;
+    const y1 = H * 0.65;
+    const numEddies = 5;
+    for (let e = 0; e < numEddies; e++) {
+      const cx = W * (e / numEddies) + W / (numEddies * 2);
+      const cy = (y0 + y1) / 2 + Math.sin(layerTime * 0.9 + e * 1.3) * (y1 - y0) * 0.15;
+      const r = 14 + Math.sin(layerTime * 1.1 + e) * 4;
+      const angle = layerTime * (e % 2 === 0 ? 1.2 : -0.9) + e * 1.1;
+      layerCtx.beginPath();
+      for (let a = 0; a <= Math.PI * 2; a += 0.1) {
+        const sr = r * (0.5 + 0.5 * Math.abs(Math.sin(a * 3 + layerTime)));
+        const px = cx + Math.cos(a + angle) * sr;
+        const py = cy + Math.sin(a + angle) * sr * 0.6;
+        a === 0 ? layerCtx.moveTo(px, py) : layerCtx.lineTo(px, py);
+      }
+      layerCtx.strokeStyle = `rgba(106,122,90,0.3)`;
+      layerCtx.lineWidth = 0.7;
+      layerCtx.stroke();
+    }
+    layerCtx.fillStyle = 'rgba(148,164,120,0.35)';
+    layerCtx.fillText('TURBULENT ZONE', W - 155, y0 + 12);
+  }
+
+  // BOUNDARY LAYER (65–85%)
+  {
+    const y0 = H * 0.65;
+    const y1 = H * 0.85;
+    const grad = layerCtx.createLinearGradient(0, y0, 0, y1);
+    grad.addColorStop(0, 'rgba(107,122,90,0.15)');
+    grad.addColorStop(1, 'rgba(107,122,90,0.35)');
+    layerCtx.fillStyle = grad;
+    layerCtx.fillRect(0, y0, W, y1 - y0);
+
+    // Slow, subtle waver
+    layerCtx.beginPath();
+    layerCtx.moveTo(0, y0);
+    for (let x = 0; x <= W; x += 4) {
+      const offset = Math.sin(x * 0.02 + layerTime * 0.5) * 2;
+      layerCtx.lineTo(x, y0 + offset);
+    }
+    layerCtx.strokeStyle = 'rgba(200,212,180,0.3)';
+    layerCtx.lineWidth = 1;
+    layerCtx.stroke();
+
+    // Dew dots in boundary layer
+    for (let dx = 20; dx < W; dx += 18) {
+      const pulse = 0.15 + 0.08 * Math.sin(dx * 0.1 + layerTime * 0.4);
+      const yd = y0 + (y1 - y0) * 0.7 + Math.sin(dx * 0.08 + layerTime * 0.25) * 3;
+      layerCtx.beginPath();
+      layerCtx.arc(dx, yd, 0.8, 0, Math.PI * 2);
+      layerCtx.fillStyle = `rgba(212,224,200,${pulse})`;
+      layerCtx.fill();
+    }
+
+    layerCtx.fillStyle = 'rgba(220,232,208,0.7)';
+    layerCtx.fillText('BOUNDARY LAYER  ←  mosses live here', 14, y1 - 6);
+  }
+
+  // STONE SURFACE (85–100%)
+  {
+    const y0 = H * 0.85;
+    const grad = layerCtx.createLinearGradient(0, y0, 0, H);
+    grad.addColorStop(0, '#2a2620');
+    grad.addColorStop(1, '#141210');
+    layerCtx.fillStyle = grad;
+    layerCtx.fillRect(0, y0, W, H - y0);
+
+    // Moss fringe
+    for (let mx = 0; mx < W; mx += 2) {
+      const h = 3 + Math.sin(mx * 0.2 + layerTime * 0.15) * 2 + Math.abs(Math.sin(mx * 0.07)) * 4;
+      layerCtx.fillStyle = `rgba(${65+Math.floor(Math.sin(mx*0.1)*10)}, ${80+Math.floor(Math.sin(mx*0.08+1)*15)}, 50, 0.65)`;
+      layerCtx.fillRect(mx, y0 - h, 1.5, h);
+    }
+    layerCtx.fillStyle = 'rgba(138,96,32,0.5)';
+    layerCtx.fillText('SURFACE', W - 80, H - 6);
+  }
+}
+
+// Initial draw without audio
+drawLayers(null);
+drawSpores(null);
+
+// Idle animation loop (no audio)
+function idleLoop() {
+  if (!isPlaying) {
+    drawLayers(null);
+    drawSpores(null);
+    requestAnimationFrame(idleLoop);
+  }
+}
+idleLoop();
+
+</script>
+</body>
+</html>

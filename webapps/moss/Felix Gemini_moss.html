@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boundary Layer Sonification</title>
+    <style>
+        body {
+            background: #121512;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            border: 1px solid #334033;
+            padding: 2.5rem;
+            border-radius: 12px;
+            background: #1a201a;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+            max-width: 550px;
+        }
+        h1 { 
+            color: #8bc34a; 
+            margin-top: 0; 
+            font-weight: 400;
+            letter-spacing: 1px;
+        }
+        p { 
+            line-height: 1.6; 
+            color: #aaa;
+            font-size: 0.95rem;
+        }
+        button {
+            background: #4caf50;
+            border: none;
+            color: white;
+            padding: 15px 35px;
+            font-size: 16px;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 25px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: bold;
+        }
+        button:hover { 
+            background: #45a049; 
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.4);
+        }
+        button:active { transform: scale(0.97); }
+        .status { 
+            margin-top: 20px; 
+            font-style: italic; 
+            color: #666; 
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>The Boundary Layer</h1>
+    <p><i>"The meeting ground between air and land is known as the boundary layer."</i></p>
+    <p>Experience the stillness of the moss layer, the turbulent air above, and the scattering of spores into the wind. Best experienced with headphones.</p>
+    <button id="playBtn">Begin Sonification</button>
+    <div id="status" class="status">Audio engine is sleeping...</div>
+</div>
+
+<script>
+    let audioCtx;
+    let isPlaying = false;
+    let masterGain;
+    let activeNodes = [];
+
+    const playBtn = document.getElementById('playBtn');
+    const statusTxt = document.getElementById('status');
+
+    // Generate a synthetic impulse response for the reverb
+    function createImpulseResponse(ctx, duration) {
+        const rate = ctx.sampleRate;
+        const length = rate * duration;
+        const impulse = ctx.createBuffer(2, length, rate);
+        for (let i = 0; i < 2; i++) {
+            const channel = impulse.getChannelData(i);
+            for (let j = 0; j < length; j++) {
+                // Exponential decay for realistic moist room acoustics
+                channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / length, 3);
+            }
+        }
+        return impulse;
+    }
+
+    function startAudio() {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.8;
+        
+        // 1. STEREO REVERB (The Moist Canopy)
+        const reverb = audioCtx.createConvolver();
+        reverb.buffer = createImpulseResponse(audioCtx, 3.5);
+        
+        masterGain.connect(reverb);
+        reverb.connect(audioCtx.destination);
+        masterGain.connect(audioCtx.destination); // Dry/Wet Mix
+
+        // 2. FM VOCAL SYNTH (The Still Moss Layer)
+        const carrier = audioCtx.createOscillator();
+        const modulator = audioCtx.createOscillator();
+        const modGain = audioCtx.createGain();
+        const vocalFilter = audioCtx.createBiquadFilter();
+        const mossPanner = audioCtx.createStereoPanner();
+
+        carrier.type = 'sawtooth';
+        modulator.type = 'sine';
+        
+        // Base stillness frequencies
+        carrier.frequency.value = 65; 
+        modulator.frequency.value = 130;
+        modGain.gain.value = 200;
+
+        // Formant filter to create "vocal" quality
+        vocalFilter.type = 'bandpass';
+        vocalFilter.frequency.value = 800; // 'Ah'/'Oh' vowel range
+        vocalFilter.Q.value = 2.5;
+
+        // Connect FM chain
+        modulator.connect(modGain);
+        modGain.connect(carrier.frequency);
+        carrier.connect(vocalFilter);
+        vocalFilter.connect(mossPanner);
+        mossPanner.connect(masterGain);
+
+        carrier.start();
+        modulator.start();
+        activeNodes.push(carrier, modulator);
+
+        // 3. SPORE GENERATOR (Turbulent Zone)
+        function triggerSpore() {
+            if (!isPlaying) return;
+            
+            const sporeOsc = audioCtx.createOscillator();
+            const sporeEnv = audioCtx.createGain();
+            const sporePanner = audioCtx.createStereoPanner();
+            
+            // "Kite on the wind" - high, piercing frequencies
+            sporeOsc.type = 'sine';
+            sporeOsc.frequency.setValueAtTime(1200 + Math.random() * 1500, audioCtx.currentTime);
+            // Slight pitch drop representing the spore catching the vortex
+            sporeOsc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.5);
+            
+            // Pluck envelope
+            sporeEnv.gain.setValueAtTime(0, audioCtx.currentTime);
+            sporeEnv.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.05);
+            sporeEnv.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.2);
+            
+            // Wild panning for turbulence
+            sporePanner.pan.value = Math.random() * 2 - 1;
+            
+            sporeOsc.connect(sporeEnv);
+            sporeEnv.connect(sporePanner);
+            sporePanner.connect(reverb); // Spores are heavily reverberated
+            
+            sporeOsc.start();
+            sporeOsc.stop(audioCtx.currentTime + 1.5);
+            
+            // Randomly trigger next spore
+            setTimeout(triggerSpore, 500 + Math.random() * 3500);
+        }
+
+        // Start the spore loop
+        triggerSpore();
+
+        // 4. DYNAMIC MODULATION (The Breathing Forest)
+        function updateEnvironment() {
+            if (!isPlaying) return;
+            const time = audioCtx.currentTime;
+            
+            // Slow breathing of the vocal formant
+            const filterFreq = 600 + Math.sin(time * 0.3) * 300;
+            vocalFilter.frequency.setTargetAtTime(filterFreq, time, 0.5);
+            
+            // Subtle shift in the stillness
+            mossPanner.pan.setTargetAtTime(Math.sin(time * 0.1) * 0.3, time, 1);
+            
+            requestAnimationFrame(updateEnvironment);
+        }
+        
+        updateEnvironment();
+    }
+
+    function stopAudio() {
+        if (audioCtx) {
+            masterGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.5);
+            setTimeout(() => {
+                audioCtx.close();
+                activeNodes = [];
+            }, 1000);
+        }
+    }
+
+    playBtn.addEventListener('click', () => {
+        if (!isPlaying) {
+            isPlaying = true;
+            playBtn.textContent = 'Stop Sonification';
+            playBtn.style.background = '#d32f2f';
+            statusTxt.textContent = "Listening to the boundary layer...";
+            startAudio();
+        } else {
+            isPlaying = false;
+            playBtn.textContent = 'Begin Sonification';
+            playBtn.style.background = '#4caf50';
+            statusTxt.textContent = "Audio engine is sleeping...";
+            stopAudio();
+        }
+    });
+</script>
+
+</body>
+</html>

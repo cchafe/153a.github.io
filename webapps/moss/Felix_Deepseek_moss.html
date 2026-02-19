@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>boundary layer · moss sonification</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; user-select: none; }
+        body {
+            background: linear-gradient(145deg, #1a2f1f 0%, #2c4230 100%);
+            min-height: 100vh; display: flex; justify-content: center; align-items: center;
+            font-family: 'Segoe UI', Roboto, sans-serif; padding: 1rem;
+        }
+        .moss-panel {
+            max-width: 720px; width: 100%; background: rgba(15, 25, 18, 0.78);
+            backdrop-filter: blur(8px); border-radius: 2.5rem 2.5rem 2rem 2rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(200, 240, 180, 0.3);
+            padding: 2rem 2rem 2.2rem; color: #dfe9d8; border: 1px solid #5f7b5b;
+        }
+        h1 {
+            font-weight: 400; font-size: 2.2rem; letter-spacing: -0.01em;
+            line-height: 1.2; margin-bottom: 0.25rem; text-shadow: 2px 2px 0 #1f3a1e;
+            color: #e2f0d6; font-family: 'Times New Roman', serif;
+        }
+        .sub {
+            font-size: 1rem; font-style: italic; color: #b7cfae;
+            border-left: 4px solid #7da06e; padding-left: 1rem; margin-bottom: 2rem;
+            background: rgba(30, 50, 30, 0.3); border-radius: 0 999px 999px 0;
+        }
+        .sub strong { color: #f5ffe0; font-style: normal; }
+        .control-row {
+            display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;
+            margin: 2rem 0 1.5rem;
+        }
+        button {
+            background: #3f6040; border: none; border-radius: 60px;
+            padding: 0.9rem 2.2rem; font-size: 1.4rem; font-weight: 500;
+            color: #f0ffe7; box-shadow: 0 6px 0 #1d2e1a, 0 8px 12px rgba(0,0,0,0.4);
+            cursor: pointer; transition: 0.07s ease; border: 1px solid #85a37c;
+            letter-spacing: 0.5px; flex: 0 1 auto;
+        }
+        button:active { transform: translateY(6px); box-shadow: 0 2px 0 #1d2e1a, 0 5px 12px rgba(0,0,0,0.4); }
+        button:disabled {
+            opacity: 0.4; transform: translateY(3px); box-shadow: 0 3px 0 #1d2e1a;
+            pointer-events: none;
+        }
+        .slider-group {
+            background: #263f28; border-radius: 40px; padding: 1rem 1.5rem;
+            display: flex; flex-wrap: wrap; gap: 1.5rem; flex: 2 1 300px;
+            border: 1px solid #718f68;
+        }
+        .slider-item { flex: 1 1 140px; }
+        .slider-item label {
+            display: flex; flex-direction: column; gap: 0.25rem;
+            font-size: 0.85rem; font-weight: 300; color: #d0e2c4;
+        }
+        input[type=range] { width: 100%; background: transparent; accent-color: #b3e0a0; }
+        .info-box {
+            background: #1e331e; border-radius: 28px; padding: 1.4rem 1.8rem;
+            border: 1px solid #63855c; box-shadow: inset 0 2px 5px #0f1a0e;
+            font-size: 0.95rem; line-height: 1.6; margin-top: 2rem; color: #d4ecd0;
+        }
+        .info-box span {
+            font-weight: 300; color: #aacf9f;
+        }
+        .footnote { text-align: right; margin-top: 1rem; font-size: 0.85rem; opacity: 0.8; }
+        .pill {
+            display: inline-block; background: #3b543b; padding: 0.2rem 0.9rem;
+            border-radius: 40px; font-size: 0.8rem; border: 1px solid #98af8d;
+            margin-right: 0.5rem;
+        }
+        hr { border: 0.5px solid #557351; margin: 1.2rem 0; }
+    </style>
+</head>
+<body>
+    <div class="moss-panel">
+        <h1>THE ADVANTAGES OF BEING SMALL</h1>
+        <div class="sub">life in the boundary layer — based on Robin Wall Kimmerer, <em>Gathering Moss</em></div>
+
+        <div class="control-row">
+            <button id="playBtn">🌱 listen</button>
+            <button id="stopBtn" disabled>⏹ stop</button>
+            <div class="slider-group">
+                <div class="slider-item">
+                    <label>🌀 boundary depth <span style="font-family: monospace;">(dry/wet)</span>
+                        <input type="range" id="reverbMix" min="0" max="1" step="0.01" value="0.5">
+                    </label>
+                </div>
+                <div class="slider-item">
+                    <label>📏 moss stature <span style="font-family: monospace;">(pitch)</span>
+                        <input type="range" id="mossHeight" min="0.5" max="2.0" step="0.01" value="1.0">
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-box">
+            <span class="pill">FM vocal synthesis</span> <span class="pill">stereo spore drift</span> <span class="pill">boundary reverb</span>
+            <p style="margin-top: 0.8rem;">
+                Reverb is now clearly noticeable: slider left = dry "near‑ground still air", right = humid "inside boundary layer".<br>
+                Moss stature influences pitch, simulating shoots reaching into the turbulent zone. Spores pan randomly left/right.
+            </p>
+        </div>
+
+        <hr>
+
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-between;">
+            <div style="font-size: 0.9rem;"><span style="font-weight:300;">🌿 “mosses are small so they live in the boundary layer — warm, moist, CO₂‑rich”</span></div>
+            <div style="font-size: 0.9rem;">🍄 setae rise above → spores catch the wind</div>
+        </div>
+        <div class="footnote">
+            ❄️ dew · decay · stillness
+        </div>
+    </div>
+
+    <script>
+        (function(){
+            // UI elements
+            const playBtn = document.getElementById('playBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const reverbSlider = document.getElementById('reverbMix');
+            const heightSlider = document.getElementById('mossHeight');
+
+            // Audio state
+            let audioContext = null;
+            let isPlaying = false;
+
+            // Core audio nodes
+            let masterGain = null;
+            let dryGain = null;                // direct sound gain (controlled by reverb slider)
+            let reverbNode = null;
+            let reverbReturnGain = null;        // reverb return gain (controlled by reverb slider)
+            let sendToReverb = null;            // fixed send bus to reverb (all sounds feed here)
+
+            // Voice references
+            let voices = [];
+            let sporeInterval = null;
+            let modulationInterval = null;
+
+            // --- create longer stereo impulse for reverb ---
+            function createBigImpulse(context, duration = 5.2, decay = 4.2) {
+                const sampleRate = context.sampleRate;
+                const length = sampleRate * duration;
+                const buffer = context.createBuffer(2, length, sampleRate);
+                const left = buffer.getChannelData(0);
+                const right = buffer.getChannelData(1);
+                for (let i = 0; i < length; i++) {
+                    const t = i / sampleRate;
+                    const env = Math.exp(- t * decay);
+                    left[i] = (Math.random() * 2 - 1) * env * 0.9;
+                    right[i] = (Math.random() * 2 - 1) * env * 0.9;
+                }
+                return buffer;
+            }
+
+            // --- create one FM voice (vocal‑like) with fixed send to reverb bus ---
+            function createFmVoice(ctx, baseFreq, modRatio, modDepth, panValue = 0, voiceGain = 0.15) {
+                const modOsc = ctx.createOscillator();
+                modOsc.type = 'sine';
+                const carOsc = ctx.createOscillator();
+                carOsc.type = 'sine';
+
+                const modGain = ctx.createGain();
+                const ampGain = ctx.createGain();
+                const panner = new StereoPannerNode(ctx, { pan: panValue });
+                const revSend = ctx.createGain();
+
+                // FM patch
+                modOsc.connect(modGain);
+                modGain.connect(carOsc.frequency);
+                carOsc.connect(ampGain);
+                ampGain.connect(panner);
+
+                // split: dry path + reverb send
+                panner.connect(dryGain);
+                panner.connect(revSend);
+                revSend.connect(sendToReverb);
+
+                const now = ctx.currentTime;
+                modOsc.frequency.setValueAtTime(baseFreq * modRatio, now);
+                carOsc.frequency.setValueAtTime(baseFreq, now);
+                modGain.gain.setValueAtTime(modDepth, now);
+                ampGain.gain.setValueAtTime(voiceGain, now);
+                revSend.gain.setValueAtTime(0.6, now);   // fixed send level
+
+                modOsc.start(now);
+                carOsc.start(now);
+
+                return {
+                    modOsc, carOsc, modGain, ampGain, panner, revSend,
+                    baseFreq, modRatio, modDepth
+                };
+            }
+
+            // --- spore sound (short FM with random pan) ---
+            function triggerSpore() {
+                if (!audioContext || !isPlaying) return;
+                const ctx = audioContext;
+                const now = ctx.currentTime;
+
+                const base = 240 + Math.random() * 500;
+                const ratio = 1.5 + Math.random() * 2.2;
+                const depth = 100 + Math.random() * 250;
+                const duration = 0.2 + Math.random() * 0.35;
+
+                const modOsc = ctx.createOscillator();
+                modOsc.type = 'sine';
+                const carOsc = ctx.createOscillator();
+                carOsc.type = 'sine';
+                const modGain = ctx.createGain();
+                const envGain = ctx.createGain();
+                const panner = new StereoPannerNode(ctx, { pan: (Math.random() * 2 - 1) });
+                const revSend = ctx.createGain();
+
+                modOsc.connect(modGain);
+                modGain.connect(carOsc.frequency);
+                carOsc.connect(envGain);
+                envGain.connect(panner);
+                panner.connect(dryGain);
+                panner.connect(revSend);
+                revSend.connect(sendToReverb);
+
+                const startTime = now + 0.02;
+                modOsc.frequency.setValueAtTime(base * ratio, startTime);
+                carOsc.frequency.setValueAtTime(base, startTime);
+                modGain.gain.setValueAtTime(depth, startTime);
+
+                envGain.gain.setValueAtTime(0.0, now);
+                envGain.gain.linearRampToValueAtTime(0.18, startTime);
+                envGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+                revSend.gain.setValueAtTime(0.7, now);
+
+                modOsc.start(startTime);
+                carOsc.start(startTime);
+                const stopTime = startTime + duration + 0.1;
+                modOsc.stop(stopTime);
+                carOsc.stop(stopTime);
+
+                modOsc.onended = () => {
+                    try {
+                        modOsc.disconnect();
+                        carOsc.disconnect();
+                        modGain.disconnect();
+                        envGain.disconnect();
+                        panner.disconnect();
+                        revSend.disconnect();
+                    } catch (e) {}
+                };
+            }
+
+            // --- initialise all audio nodes (called after user gesture) ---
+            function initAudio() {
+                if (audioContext) return;
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const ctx = audioContext;
+
+                masterGain = ctx.createGain();
+                masterGain.gain.setValueAtTime(0.65, ctx.currentTime);
+                masterGain.connect(ctx.destination);
+
+                dryGain = ctx.createGain();
+                dryGain.connect(masterGain);
+
+                reverbNode = ctx.createConvolver();
+                reverbNode.buffer = createBigImpulse(ctx, 5.5, 4.2);
+                reverbNode.normalize = true;
+
+                reverbReturnGain = ctx.createGain();
+                reverbReturnGain.connect(masterGain);
+                reverbNode.connect(reverbReturnGain);
+
+                sendToReverb = ctx.createGain();
+                sendToReverb.gain.setValueAtTime(1.0, ctx.currentTime);
+                sendToReverb.connect(reverbNode);
+
+                // set initial dry/wet from slider
+                const mix = parseFloat(reverbSlider.value);
+                dryGain.gain.setValueAtTime(1 - mix, ctx.currentTime);
+                reverbReturnGain.gain.setValueAtTime(mix * 1.5, ctx.currentTime);
+
+                // create four continuous moss voices
+                voices = [
+                    createFmVoice(ctx, 82, 1.8, 110, 0.0, 0.13),    // low carpet
+                    createFmVoice(ctx, 156, 2.4, 140, -0.3, 0.11),  // left mid
+                    createFmVoice(ctx, 238, 1.2, 280, 0.4, 0.08),   // right tips
+                    createFmVoice(ctx, 305, 2.9, 95, 0.1, 0.07)     // centre shimmer
+                ];
+
+                startModulations(ctx);
+
+                sporeInterval = setInterval(() => {
+                    if (!isPlaying) return;
+                    const count = 1 + Math.floor(Math.random() * 2);
+                    for (let i = 0; i < count; i++) {
+                        setTimeout(() => { if (isPlaying) triggerSpore(); }, i * 90);
+                    }
+                }, 2800);
+            }
+
+            // slow modulations: pitch (influenced by mossHeight slider) and pan drift
+            function startModulations(ctx) {
+                if (modulationInterval) clearInterval(modulationInterval);
+                modulationInterval = setInterval(() => {
+                    if (!isPlaying || !voices.length || !ctx) return;
+                    const now = ctx.currentTime;
+                    const heightFactor = parseFloat(heightSlider.value);
+
+                    voices.forEach((v, idx) => {
+                        // pan slowly wanders
+                        let targetPan;
+                        if (idx === 0) targetPan = 0.1 * Math.sin(now * 0.08);
+                        else if (idx === 1) targetPan = -0.3 + 0.2 * Math.sin(now * 0.12);
+                        else if (idx === 2) targetPan = 0.4 + 0.25 * Math.sin(now * 0.18);
+                        else targetPan = 0.2 * Math.sin(now * 0.22);
+                        v.panner.pan.linearRampToValueAtTime(targetPan, now + 0.6);
+
+                        // base frequency influenced by height slider + slight natural drift
+                        const newBase = v.baseFreq * heightFactor * (0.97 + 0.06 * Math.sin(now * 0.09 + idx));
+                        v.carOsc.frequency.linearRampToValueAtTime(newBase, now + 0.5);
+
+                        // modulation depth subtle variation
+                        const newDepth = v.modDepth * (0.9 + 0.2 * Math.sin(now * 0.15 + idx));
+                        v.modGain.gain.linearRampToValueAtTime(newDepth, now + 0.5);
+                    });
+                }, 280);
+            }
+
+            // stop all sounds and clean up
+            function stopAll() {
+                isPlaying = false;
+                if (sporeInterval) { clearInterval(sporeInterval); sporeInterval = null; }
+                if (modulationInterval) { clearInterval(modulationInterval); modulationInterval = null; }
+                if (audioContext) {
+                    voices.forEach(v => {
+                        try { v.modOsc.stop(); v.carOsc.stop(); } catch (e) {}
+                    });
+                    voices = [];
+                    audioContext.close().catch(console.warn);
+                    audioContext = null;
+                }
+                playBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+
+            // start playback (user gesture)
+            function startAudio() {
+                if (isPlaying) return;
+                if (!audioContext) initAudio();
+                else if (audioContext.state === 'suspended') audioContext.resume();
+
+                audioContext?.resume().then(() => {
+                    isPlaying = true;
+                    playBtn.disabled = true;
+                    stopBtn.disabled = false;
+                }).catch(console.warn);
+            }
+
+            // --- slider event listeners ---
+            reverbSlider.addEventListener('input', (e) => {
+                const mix = parseFloat(e.target.value);
+                if (dryGain && reverbReturnGain) {
+                    const now = audioContext?.currentTime || 0;
+                    dryGain.gain.setValueAtTime(1 - mix, now);
+                    reverbReturnGain.gain.setValueAtTime(mix * 1.5, now);
+                }
+            });
+
+            // height slider is used inside modulation loop, no extra code needed
+
+            // button events
+            playBtn.addEventListener('click', startAudio);
+            stopBtn.addEventListener('click', stopAll);
+
+            // clean intervals on page unload
+            window.addEventListener('beforeunload', () => {
+                if (sporeInterval) clearInterval(sporeInterval);
+                if (modulationInterval) clearInterval(modulationInterval);
+                if (audioContext) audioContext.close();
+            });
+
+            // initial button state
+            stopBtn.disabled = true;
+        })();
+    </script>
+</body>
+</html>
