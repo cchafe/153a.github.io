@@ -1,1 +1,2 @@
 using the attached chapter as a description, sonify life in the boundary layer using the web audio API with the classic FM vocal synthesis algorithm, stereo panning and stereo reverb, provide the result as an artifact that is an all-in-one webapp with no dependencies 
+

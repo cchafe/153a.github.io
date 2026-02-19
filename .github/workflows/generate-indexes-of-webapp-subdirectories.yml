@@ -1,16 +1,20 @@
-name: Generate moss index.html
+name: Generate webapps indexes
 
 on:
   push:
     branches: [ "main" ]
     paths:
-      - "moss/**"
-      - "scripts/generate-moss-index.mjs"
-      - ".github/workflows/generate-moss-index.yml"
+      - "webapps/**"
+      - "scripts/generate-indexes-of-webapp-subdirectories.mjs"
+      - ".github/workflows/generate-indexes-of-webapp-subdirectories.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: webapps-indexes-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -26,8 +30,8 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Generate moss/index.html
-        run: node scripts/generate-moss-index.mjs
+      - name: Generate webapps/**/index.html
+        run: node scripts/generate-indexes-of-webapp-subdirectories.mjs
 
       - name: Commit changes (if any)
         run: |
@@ -35,9 +39,11 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add moss/index.html
-          git commit -m "Auto-generate moss/index.html"
+
+          git add webapps/**/index.html
+          git commit -m "Auto-generate webapps/**/index.html"
           git push
 
