@@ -30,11 +30,14 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Generate webapps/**/index.html
+      - name: Generate webapps/index.html and webapps/**/index.html
         run: node scripts/generate-indexes-of-webapp-subdirectories.mjs
 
       - name: Commit changes (if any)
+        shell: bash
         run: |
+          set -euo pipefail
+
           if git diff --quiet; then
             echo "No changes to commit."
             exit 0
@@ -43,7 +46,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add webapps/index.html webapps/**/index.html
-          git commit -m "Auto-generate webapps/**/index.html"
+          # Stage BOTH the top-level webapps index and all subdirectory indexes
+          git add -A webapps/index.html webapps/**/index.html
+
+          # In case nothing matched (e.g., directory missing), avoid failing the job
+          if git diff --cached --quiet; then
+            echo "No staged changes after git add."
+            exit 0
+          fi
+
+          git commit -m "Auto-generate webapps indexes"
           git push
 
