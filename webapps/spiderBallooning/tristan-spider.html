@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Spider Ballooning Sonification Ensemble</title>
+<style>
+body {
+  background: #0e0e14;
+  color: #e8e8f0;
+  font-family: sans-serif;
+  text-align: center;
+  padding: 30px;
+}
+canvas {
+  background: #151525;
+  border: 1px solid #333;
+  margin-top: 20px;
+}
+.controls {
+  margin-top: 20px;
+}
+input[type="range"] {
+  width: 260px;
+}
+button {
+  background: #2b2b40;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  margin: 5px;
+  cursor: pointer;
+}
+button:hover {
+  background: #44446a;
+}
+</style>
+</head>
+<body>
+
+<h1>🕷 Spider Ballooning Ensemble</h1>
+
+<div class="controls">
+  <button id="start">Start</button>
+  <button id="stop">Stop</button><br><br>
+
+  Ascent Rate<br>
+  <input type="range" id="rate" min="0.1" max="5" step="0.1" value="1"><br><br>
+
+  Loudness<br>
+  <input type="range" id="loudness" min="0" max="1" step="0.01" value="0.3"><br><br>
+
+  Spider Count<br>
+  <input type="range" id="count" min="1" max="12" step="1" value="4">
+</div>
+
+<canvas id="viz" width="600" height="250"></canvas>
+
+<script>
+let audioCtx;
+let masterGain;
+let spiders = [];
+let animationId;
+let noiseBuffer;
+
+const canvas = document.getElementById("viz");
+const ctx = canvas.getContext("2d");
+
+class Spider {
+  constructor() {
+    this.height = Math.random();
+    this.x = Math.random() * canvas.width;
+    this.drift = Math.random() * 0.002 + 0.001;
+
+    this.osc = audioCtx.createOscillator();
+    this.osc.type = "sine";
+
+    this.gain = audioCtx.createGain();
+    this.filter = audioCtx.createBiquadFilter();
+    this.filter.type = "lowpass";
+
+    this.panner = audioCtx.createStereoPanner();
+
+    this.lfo = audioCtx.createOscillator();
+    this.lfoGain = audioCtx.createGain();
+
+    this.lfo.frequency.value = 0.3 + Math.random();
+    this.lfoGain.gain.value = 20;
+
+    this.lfo.connect(this.lfoGain);
+    this.lfoGain.connect(this.osc.frequency);
+
+    this.osc.connect(this.filter);
+    this.filter.connect(this.gain);
+    this.gain.connect(this.panner);
+    this.panner.connect(masterGain);
+
+    this.osc.start();
+    this.lfo.start();
+  }
+
+  update(rate) {
+    this.height += 0.0015 * rate;
+    if (this.height > 1) this.height = 0;
+
+    const freq = 200 + this.height * 1000;
+    this.osc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.05);
+
+    // Electrostatic lift brightness
+    const brightness = 500 + this.height * 4000;
+    this.filter.frequency.setTargetAtTime(brightness, audioCtx.currentTime, 0.1);
+
+    // Amplitude slightly tied to altitude
+    this.gain.gain.setTargetAtTime(0.1 + this.height * 0.2, audioCtx.currentTime, 0.1);
+
+    // Stereo drift
+    this.x += this.drift * canvas.width * rate;
+    if (this.x > canvas.width) this.x = 0;
+    const panVal = (this.x / canvas.width) * 2 - 1;
+    this.panner.pan.setTargetAtTime(panVal, audioCtx.currentTime, 0.1);
+  }
+
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, canvas.height - this.height * canvas.height, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#9aa";
+    ctx.fill();
+  }
+
+  stop() {
+    this.osc.stop();
+    this.lfo.stop();
+  }
+}
+
+function createNoiseBuffer() {
+  const bufferSize = audioCtx.sampleRate * 2;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+  return buffer;
+}
+
+function startAudio() {
+  if (audioCtx) return;
+
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = document.getElementById("loudness").value;
+  masterGain.connect(audioCtx.destination);
+
+  noiseBuffer = createNoiseBuffer();
+  createSilkTexture();
+
+  createSpiders();
+  animate();
+}
+
+function createSpiders() {
+  spiders = [];
+  const count = parseInt(document.getElementById("count").value);
+  for (let i = 0; i < count; i++) {
+    spiders.push(new Spider());
+  }
+}
+
+function createSilkTexture() {
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuffer;
+  noise.loop = true;
+
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 3000;
+  filter.Q.value = 2;
+
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.05;
+
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(masterGain);
+
+  noise.start();
+}
+
+function stopAudio() {
+  spiders.forEach(s => s.stop());
+  cancelAnimationFrame(animationId);
+  audioCtx.close();
+  audioCtx = null;
+}
+
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const rate = parseFloat(document.getElementById("rate").value);
+
+  spiders.forEach(s => {
+    s.update(rate);
+    s.draw();
+  });
+
+  animationId = requestAnimationFrame(animate);
+}
+
+document.getElementById("start").onclick = startAudio;
+document.getElementById("stop").onclick = stopAudio;
+
+document.getElementById("loudness").oninput = function() {
+  if (masterGain)
+    masterGain.gain.setTargetAtTime(this.value, audioCtx.currentTime, 0.01);
+};
+
+document.getElementById("count").oninput = function() {
+  if (!audioCtx) return;
+  spiders.forEach(s => s.stop());
+  createSpiders();
+};
+</script>
+
+</body>
+</html>
+

@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Life in the Boundary Layer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Space+Mono:wght@400&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #0b0f0a;
+    --deep: #0e1710;
+    --moss-dark: #1a2e1a;
+    --moss: #2d5a27;
+    --moss-bright: #4a8c3f;
+    --lichen: #7ab648;
+    --spore: #b8e090;
+    --dew: #c8f0e8;
+    --laminar: #5a8fa8;
+    --turbulent: #7a6fa0;
+    --bark: #3d2b1f;
+    --warm-stone: #8a7a5a;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--ink);
+    color: var(--spore);
+    font-family: 'Cormorant Garamond', serif;
+    overflow: hidden;
+  }
+
+  canvas#bg {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 0;
+  }
+
+  #ui {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    pointer-events: none;
+  }
+
+  #title-block {
+    position: fixed; top: 32px; left: 50%; transform: translateX(-50%);
+    text-align: center;
+    pointer-events: none;
+  }
+
+  #title-block h1 {
+    font-size: clamp(1.4rem, 3vw, 2.4rem);
+    font-weight: 300;
+    font-style: italic;
+    letter-spacing: 0.04em;
+    color: var(--dew);
+    opacity: 0.9;
+    line-height: 1.2;
+  }
+
+  #title-block p {
+    margin-top: 6px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    color: var(--lichen);
+    opacity: 0.6;
+    text-transform: uppercase;
+  }
+
+  /* Layer labels */
+  .layer-label {
+    position: fixed;
+    right: 28px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.55rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    writing-mode: horizontal-tb;
+    pointer-events: none;
+    transition: opacity 0.5s;
+  }
+
+  #lbl-laminar { color: var(--laminar); opacity: 0.5; top: 12%; }
+  #lbl-turbulent { color: var(--turbulent); opacity: 0.5; top: 42%; }
+  #lbl-boundary { color: var(--lichen); opacity: 0.7; bottom: 22%; }
+
+  /* Controls */
+  #controls {
+    pointer-events: all;
+    padding: 20px 30px 28px;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    width: 100%;
+    background: linear-gradient(to top, rgba(11,15,10,0.95) 60%, transparent);
+  }
+
+  #play-btn {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    border: 1.5px solid var(--moss-bright);
+    background: transparent;
+    color: var(--lichen);
+    font-size: 1.8rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.3s;
+    position: relative;
+    outline: none;
+  }
+
+  #play-btn::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 1px solid var(--moss-bright);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  #play-btn:hover { border-color: var(--lichen); color: var(--dew); }
+  #play-btn:hover::before { opacity: 0.4; }
+  #play-btn.active { border-color: var(--spore); color: var(--spore); }
+  #play-btn.active::before { opacity: 0.6; animation: pulse-ring 2s infinite; }
+
+  @keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
+
+  #sliders {
+    display: flex; gap: 24px; align-items: flex-end; flex-wrap: wrap; justify-content: center;
+  }
+
+  .slider-group {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+
+  .slider-group label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.5rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--warm-stone);
+    opacity: 0.8;
+  }
+
+  .slider-group span {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.52rem;
+    color: var(--lichen);
+    opacity: 0.9;
+    min-width: 32px;
+    text-align: center;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 90px; height: 3px;
+    background: var(--moss-dark);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    background: var(--lichen);
+    border: 1px solid var(--spore);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  input[type=range]:hover::-webkit-slider-thumb { background: var(--dew); }
+
+  #poem {
+    font-size: clamp(0.7rem, 1.5vw, 0.85rem);
+    font-style: italic;
+    color: var(--spore);
+    opacity: 0.45;
+    text-align: center;
+    max-width: 420px;
+    line-height: 1.8;
+    pointer-events: none;
+    transition: opacity 1s;
+    min-height: 2.5em;
+  }
+
+  #click-hint {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.5rem;
+    letter-spacing: 0.2em;
+    color: var(--warm-stone);
+    opacity: 0.5;
+    text-transform: uppercase;
+    text-align: center;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+
+<div id="title-block">
+  <h1>Life in the Boundary Layer</h1>
+  <p>Kimmerer · Gathering Moss · Sonification</p>
+</div>
+
+<div class="layer-label" id="lbl-laminar">Laminar Flow</div>
+<div class="layer-label" id="lbl-turbulent">Turbulent Zone</div>
+<div class="layer-label" id="lbl-boundary">Boundary Layer</div>
+
+<div id="ui">
+  <div id="controls">
+    <div id="poem">cheek to cheek with rocks and logs,<br>intimate with contours and texture</div>
+    <button id="play-btn" aria-label="Play/Pause">▶</button>
+    <div id="sliders">
+      <div class="slider-group">
+        <label>moisture</label>
+        <input type="range" id="s-moisture" min="0" max="1" step="0.01" value="0.6">
+        <span id="v-moisture">0.60</span>
+      </div>
+      <div class="slider-group">
+        <label>wind</label>
+        <input type="range" id="s-wind" min="0" max="1" step="0.01" value="0.3">
+        <span id="v-wind">0.30</span>
+      </div>
+      <div class="slider-group">
+        <label>density</label>
+        <input type="range" id="s-density" min="0" max="1" step="0.01" value="0.5">
+        <span id="v-density">0.50</span>
+      </div>
+      <div class="slider-group">
+        <label>spore release</label>
+        <input type="range" id="s-spore" min="0" max="1" step="0.01" value="0.3">
+        <span id="v-spore">0.30</span>
+      </div>
+      <div class="slider-group">
+        <label>reverb</label>
+        <input type="range" id="s-reverb" min="0" max="1" step="0.01" value="0.55">
+        <span id="v-reverb">0.55</span>
+      </div>
+    </div>
+    <div id="click-hint">click canvas · spawn voices · touch to explore</div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   BOUNDARY LAYER SONIFICATION
+   Robin Wall Kimmerer — "The Advantages of Being Small"
+   FM Vocal Synthesis · Stereo Panning · Convolution Reverb
+   ===================================================================== */
+
+const canvas = document.getElementById('bg');
+const ctx2d = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Parameters (driven by sliders) ──────────────────────────────────
+let P = {
+  moisture: 0.6,
+  wind: 0.3,
+  density: 0.5,
+  spore: 0.3,
+  reverb: 0.55
+};
+
+// Slider wiring
+document.querySelectorAll('input[type=range]').forEach(el => {
+  const key = el.id.replace('s-', '');
+  const disp = document.getElementById('v-' + key);
+  el.addEventListener('input', () => {
+    P[key] = parseFloat(el.value);
+    if (disp) disp.textContent = P[key].toFixed(2);
+    if (audio.ctx) applyParams();
+  });
+});
+
+// ── Poem cycling ─────────────────────────────────────────────────────
+const poems = [
+  'cheek to cheek with rocks and logs,\nintimate with contours and texture',
+  'like a floating greenhouse\nhovering just above the rock surface',
+  'the boundary layer traps not only heat\nbut water vapor',
+  'still air that you experience\nwhile lying on the ground',
+  'the spores thrust upward\ninto the turbulent zone',
+  'mosses were made\nfor the boundary layer',
+  'in being small,\ntheir limitation is their strength',
+  'a humid zone\nin which the mosses flourish',
+  'living on dew\nat the air-rock interface',
+  'the larger the boundary layer,\nthe larger the moss can be'
+];
+let poemIdx = 0;
+const poemEl = document.getElementById('poem');
+function cyclePoemText() {
+  poemEl.style.opacity = '0';
+  setTimeout(() => {
+    poemIdx = (poemIdx + 1) % poems.length;
+    poemEl.innerHTML = poems[poemIdx].replace('\n', '<br>');
+    poemEl.style.opacity = '0.45';
+  }, 800);
+}
+setInterval(cyclePoemText, 7000);
+
+// ── Audio Engine ─────────────────────────────────────────────────────
+const audio = { ctx: null, masterGain: null, reverbNode: null, reverbGain: null, dryGain: null, voices: [] };
+
+async function makeIRBuffer(actx) {
+  // Synthetic reverb IR — forest cave ambience
+  const sr = actx.sampleRate;
+  const len = Math.floor(sr * 3.2);
+  const buf = actx.createBuffer(2, len, sr);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < len; i++) {
+      const t = i / sr;
+      // Early reflections (rock surfaces) + long diffuse tail (forest)
+      let v = (Math.random() * 2 - 1);
+      // Early reflections
+      if (t < 0.08) v *= Math.exp(-t * 25) * 2.0;
+      else v *= Math.exp(-t * 1.8) * 0.7;
+      // Slight low-frequency bias for warmth
+      d[i] = v;
+    }
+  }
+  return buf;
+}
+
+async function initAudio() {
+  if (audio.ctx) return;
+  audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const actx = audio.ctx;
+
+  // Master chain: dry/wet split → reverb convolver → master gain
+  audio.masterGain = actx.createGain();
+  audio.masterGain.gain.value = 0.72;
+  audio.masterGain.connect(actx.destination);
+
+  audio.dryGain = actx.createGain();
+  audio.dryGain.connect(audio.masterGain);
+
+  audio.reverbConv = actx.createConvolver();
+  audio.reverbConv.buffer = await makeIRBuffer(actx);
+  audio.reverbGain = actx.createGain();
+  audio.reverbGain.gain.value = P.reverb;
+  audio.reverbConv.connect(audio.reverbGain);
+  audio.reverbGain.connect(audio.masterGain);
+
+  // Stereo panner is connected per-voice; both feed dry bus + reverb
+  applyParams();
+  startAmbience();
+}
+
+function applyParams() {
+  if (!audio.ctx) return;
+  const actx = audio.ctx;
+  // reverb wet/dry
+  const now = actx.currentTime;
+  audio.reverbGain.gain.linearRampToValueAtTime(P.reverb * 0.9, now + 0.3);
+  audio.dryGain.gain.linearRampToValueAtTime(0.5 + P.moisture * 0.4, now + 0.3);
+}
+
+// ── FM Vocal Voice ────────────────────────────────────────────────────
+// Each voice: carrier osc (FM) + modulator → panner → dry + reverb
+function createFMVoice({ freq, modRatio, modDepth, pan, attack, sustain, release, gain }) {
+  const actx = audio.ctx;
+  if (!actx) return;
+  const now = actx.currentTime;
+
+  const mod = actx.createOscillator();
+  const modGain = actx.createGain();
+  const car = actx.createOscillator();
+  const carGain = actx.createGain();
+  const panner = actx.createStereoPanner();
+  const voiceGain = actx.createGain();
+
+  // FM modulator
+  mod.frequency.value = freq * modRatio;
+  mod.type = 'sine';
+  modGain.gain.value = freq * modDepth;
+  mod.connect(modGain);
+  modGain.connect(car.frequency);
+
+  // Carrier — use sine for vowel-like quality
+  car.type = 'sine';
+  car.frequency.value = freq;
+  car.connect(carGain);
+  carGain.gain.value = 1;
+  carGain.connect(panner);
+
+  panner.pan.value = pan;
+  panner.connect(voiceGain);
+
+  // Envelope
+  voiceGain.gain.setValueAtTime(0, now);
+  voiceGain.gain.linearRampToValueAtTime(gain, now + attack);
+  voiceGain.gain.setValueAtTime(gain, now + attack + sustain);
+  voiceGain.gain.exponentialRampToValueAtTime(0.0001, now + attack + sustain + release);
+
+  // Route to dry + reverb
+  voiceGain.connect(audio.dryGain);
+  voiceGain.connect(audio.reverbConv);
+
+  mod.start(now); car.start(now);
+  const stopT = now + attack + sustain + release + 0.1;
+  mod.stop(stopT); car.stop(stopT);
+
+  // Slight pitch drift — breathing quality
+  const drift = (Math.random() - 0.5) * freq * 0.015;
+  car.frequency.linearRampToValueAtTime(freq + drift, now + attack + sustain * 0.5);
+  mod.frequency.linearRampToValueAtTime(freq * modRatio + drift * modRatio, now + attack + sustain * 0.5);
+
+  return { stop: () => { try { mod.stop(); car.stop(); } catch(e){} } };
+}
+
+// Vowel formant stacks — map to ecological zones
+const FORMANTS = {
+  // Boundary layer: warm, moist, still — "oo", "oh" vowels
+  boundary: [
+    { modRatio: 1.41, modDepth: 0.8 }, // oo
+    { modRatio: 2.0,  modDepth: 0.4 }, // oh
+    { modRatio: 1.5,  modDepth: 1.2 }, // warm hum
+  ],
+  // Turbulent zone: airy, swirling — "ah", "eh"
+  turbulent: [
+    { modRatio: 3.0,  modDepth: 2.5 }, // breathy
+    { modRatio: 2.5,  modDepth: 1.8 }, // ah
+    { modRatio: 4.0,  modDepth: 3.0 }, // airy
+  ],
+  // Laminar flow: high, smooth — thin whistling
+  laminar: [
+    { modRatio: 7.0,  modDepth: 4.0 },
+    { modRatio: 5.5,  modDepth: 3.5 },
+  ],
+  // Spore — high, fleeting, dispersing
+  spore: [
+    { modRatio: 8.0,  modDepth: 6.0 },
+    { modRatio: 11.0, modDepth: 5.0 },
+  ],
+  // Dew — crystalline drops
+  dew: [
+    { modRatio: 1.99, modDepth: 0.05 }, // near-harmonic, pure
+    { modRatio: 2.01, modDepth: 0.05 },
+  ]
+};
+
+// Harmonic series rooted in natural moss-world — pentatonic + overtones
+const ROOTS = [55, 82.4, 110, 146.8, 164.8, 220, 246.9, 293.7, 329.6, 440];
+
+function boundaryVoice() {
+  const root = ROOTS[Math.floor(Math.random() * 5)]; // low roots
+  const fm = FORMANTS.boundary[Math.floor(Math.random() * FORMANTS.boundary.length)];
+  const pan = (Math.random() - 0.5) * 0.6;
+  createFMVoice({
+    freq: root * (Math.random() < 0.3 ? 2 : 1),
+    modRatio: fm.modRatio,
+    modDepth: fm.modDepth * P.moisture,
+    pan,
+    attack: 0.8 + Math.random() * 1.5,
+    sustain: 3 + Math.random() * 5 * P.moisture,
+    release: 2 + Math.random() * 3,
+    gain: 0.06 + P.density * 0.09
+  });
+}
+
+function turbulentVoice() {
+  const root = ROOTS[3 + Math.floor(Math.random() * 4)];
+  const fm = FORMANTS.turbulent[Math.floor(Math.random() * FORMANTS.turbulent.length)];
+  const pan = (Math.random() - 0.5) * 0.9;
+  createFMVoice({
+    freq: root * (1 + P.wind * 0.5),
+    modRatio: fm.modRatio * (1 + P.wind * 0.3),
+    modDepth: fm.modDepth * P.wind,
+    pan,
+    attack: 0.1 + Math.random() * 0.4,
+    sustain: 0.3 + Math.random() * 1.2 * P.wind,
+    release: 0.8 + Math.random() * 1.5,
+    gain: 0.03 + P.wind * 0.06
+  });
+}
+
+function laminarVoice() {
+  const root = ROOTS[7 + Math.floor(Math.random() * 3)];
+  const fm = FORMANTS.laminar[Math.floor(Math.random() * FORMANTS.laminar.length)];
+  createFMVoice({
+    freq: root,
+    modRatio: fm.modRatio,
+    modDepth: fm.modDepth * 0.3,
+    pan: (Math.random() - 0.5) * 0.3,
+    attack: 2.0 + Math.random() * 3,
+    sustain: 4 + Math.random() * 6,
+    release: 3 + Math.random() * 4,
+    gain: 0.025
+  });
+}
+
+function sporeVoice(pan) {
+  pan = pan !== undefined ? pan : (Math.random() - 0.5) * 0.95;
+  const root = ROOTS[5 + Math.floor(Math.random() * 5)];
+  const fm = FORMANTS.spore[Math.floor(Math.random() * FORMANTS.spore.length)];
+  createFMVoice({
+    freq: root * (2 + Math.random()),
+    modRatio: fm.modRatio,
+    modDepth: fm.modDepth * P.spore,
+    pan,
+    attack: 0.02 + Math.random() * 0.05,
+    sustain: 0.05 + Math.random() * 0.3,
+    release: 0.4 + Math.random() * 1.2,
+    gain: 0.04 + P.spore * 0.07
+  });
+}
+
+function dewVoice() {
+  const root = ROOTS[4 + Math.floor(Math.random() * 4)] * 4;
+  const fm = FORMANTS.dew[Math.floor(Math.random() * FORMANTS.dew.length)];
+  const pan = (Math.random() - 0.5) * 0.8;
+  createFMVoice({
+    freq: root,
+    modRatio: fm.modRatio,
+    modDepth: fm.modDepth,
+    pan,
+    attack: 0.005,
+    sustain: 0.01 + Math.random() * 0.05,
+    release: 0.3 + Math.random() * 0.8,
+    gain: 0.05 + P.moisture * 0.04
+  });
+}
+
+// ── Ambience scheduling ───────────────────────────────────────────────
+let ambienceRunning = false;
+function startAmbience() {
+  if (ambienceRunning) return;
+  ambienceRunning = true;
+  scheduleLayer();
+}
+
+function scheduleLayer() {
+  if (!isPlaying) { ambienceRunning = false; return; }
+  // Boundary layer voices — steady, warm, frequent
+  const bInterval = 1500 - P.density * 800 + Math.random() * 800;
+  setTimeout(() => {
+    if (isPlaying) boundaryVoice();
+    scheduleLayer();
+  }, bInterval);
+}
+
+let turbInterval = null, laminarInterval = null, sporeInterval = null, dewInterval = null;
+
+function startPeriodicVoices() {
+  // Turbulent zone — sporadic, windier
+  turbInterval = setInterval(() => {
+    if (P.wind > 0.1) turbulentVoice();
+  }, 900 + Math.random() * 500);
+
+  // Laminar — long, slow, sweeping
+  laminarInterval = setInterval(() => {
+    laminarVoice();
+  }, 4000 + Math.random() * 3000);
+
+  // Spores — occasional burst
+  sporeInterval = setInterval(() => {
+    if (P.spore > 0.05) {
+      const n = 1 + Math.floor(P.spore * 4);
+      for (let i = 0; i < n; i++) {
+        setTimeout(() => sporeVoice(), i * 60 + Math.random() * 100);
+      }
+    }
+  }, 2500 + Math.random() * 3500);
+
+  // Dew drops — at night/moisture
+  dewInterval = setInterval(() => {
+    if (P.moisture > 0.4 && Math.random() < P.moisture) dewVoice();
+  }, 600 + Math.random() * 1200);
+}
+
+function stopPeriodicVoices() {
+  clearInterval(turbInterval);
+  clearInterval(laminarInterval);
+  clearInterval(sporeInterval);
+  clearInterval(dewInterval);
+  turbInterval = laminarInterval = sporeInterval = dewInterval = null;
+}
+
+// ── Play/Pause ────────────────────────────────────────────────────────
+let isPlaying = false;
+const playBtn = document.getElementById('play-btn');
+
+playBtn.addEventListener('click', async () => {
+  if (!audio.ctx) {
+    await initAudio();
+  }
+  if (audio.ctx.state === 'suspended') {
+    await audio.ctx.resume();
+  }
+  isPlaying = !isPlaying;
+  playBtn.textContent = isPlaying ? '⏸' : '▶';
+  playBtn.classList.toggle('active', isPlaying);
+  if (isPlaying) {
+    startAmbience();
+    startPeriodicVoices();
+  } else {
+    stopPeriodicVoices();
+    ambienceRunning = false;
+  }
+});
+
+// ── Canvas click → spawn spatial voice ───────────────────────────────
+canvas.addEventListener('click', async (e) => {
+  if (!audio.ctx) { await initAudio(); }
+  if (audio.ctx.state === 'suspended') await audio.ctx.resume();
+
+  const yFrac = e.clientY / H;
+  const pan = (e.clientX / W) * 2 - 1; // -1 left, +1 right
+
+  // Determine zone from y position
+  if (yFrac < 0.28) {
+    // Laminar zone
+    laminarVoice();
+    spawnParticle(e.clientX, e.clientY, 'laminar');
+  } else if (yFrac < 0.6) {
+    // Turbulent zone
+    turbulentVoice();
+    spawnParticle(e.clientX, e.clientY, 'turbulent');
+  } else if (yFrac < 0.82) {
+    // Boundary layer
+    boundaryVoice();
+    spawnParticle(e.clientX, e.clientY, 'boundary');
+    if (Math.random() < 0.4) dewVoice();
+  } else {
+    // Surface — spore burst
+    for (let i = 0; i < 3 + Math.floor(P.spore * 5); i++) {
+      setTimeout(() => sporeVoice(pan + (Math.random() - 0.5) * 0.4), i * 40);
+    }
+    spawnSpores(e.clientX, e.clientY);
+  }
+});
+
+// ── Visual system ─────────────────────────────────────────────────────
+const particles = [];
+const spores = [];
+const mossClumps = [];
+
+// Generate moss surface on load
+function generateMoss() {
+  const count = Math.floor(W / 18);
+  for (let i = 0; i < count; i++) {
+    mossClumps.push({
+      x: (i / count) * W + (Math.random() - 0.5) * 20,
+      baseH: H * 0.82 + Math.random() * 10,
+      height: 8 + Math.random() * 28,
+      width: 6 + Math.random() * 14,
+      hue: 100 + Math.random() * 40,
+      saturation: 45 + Math.random() * 30,
+      lightness: 20 + Math.random() * 18,
+      phase: Math.random() * Math.PI * 2,
+      phaseSpeed: 0.001 + Math.random() * 0.003,
+    });
+  }
+}
+
+function spawnParticle(x, y, zone) {
+  const colors = {
+    laminar: `hsla(200, 60%, 70%, 0.7)`,
+    turbulent: `hsla(270, 50%, 70%, 0.7)`,
+    boundary: `hsla(100, 60%, 65%, 0.75)`
+  };
+  particles.push({
+    x, y,
+    vx: (Math.random() - 0.5) * 2,
+    vy: zone === 'laminar' ? -0.5 - Math.random() : (Math.random() - 0.5) * 1.5,
+    life: 1,
+    decay: 0.008 + Math.random() * 0.01,
+    size: 3 + Math.random() * 6,
+    color: colors[zone] || colors.boundary
+  });
+}
+
+function spawnSpores(x, y) {
+  const n = 8 + Math.floor(P.spore * 12);
+  for (let i = 0; i < n; i++) {
+    const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.7;
+    const speed = 0.5 + Math.random() * 3;
+    spores.push({
+      x, y,
+      vx: Math.cos(angle) * speed * (1 + P.wind * 0.8),
+      vy: Math.sin(angle) * speed - 0.3,
+      life: 1,
+      decay: 0.004 + Math.random() * 0.008,
+      size: 1 + Math.random() * 3,
+      hue: 80 + Math.random() * 60
+    });
+  }
+}
+
+let airStreamOffset = 0;
+let time = 0;
+
+function drawFrame() {
+  time += 0.008;
+  airStreamOffset += 0.3 + P.wind * 1.5;
+
+  const grad = ctx2d.createLinearGradient(0, 0, 0, H);
+  // Sky/laminar zone — deep slate blue-green
+  grad.addColorStop(0,   `hsl(200, 25%, ${4 + P.wind * 4}%)`);
+  grad.addColorStop(0.28,`hsl(220, 20%, ${6 + P.wind * 3}%)`);
+  // Turbulent zone
+  grad.addColorStop(0.28, `hsl(250, 18%, ${7}%)`);
+  grad.addColorStop(0.60, `hsl(200, 15%, ${8}%)`);
+  // Boundary layer — warm, mossy
+  grad.addColorStop(0.60, `hsl(120, 22%, ${6 + P.moisture * 4}%)`);
+  grad.addColorStop(0.82, `hsl(100, 30%, ${8 + P.moisture * 5}%)`);
+  // Surface — dark bark/stone
+  grad.addColorStop(0.82, `hsl(30, 20%, ${5}%)`);
+  grad.addColorStop(1,    `hsl(20, 15%, ${3}%)`);
+
+  ctx2d.fillStyle = grad;
+  ctx2d.fillRect(0, 0, W, H);
+
+  // ── Laminar flow streaks ──
+  ctx2d.save();
+  const lAlpha = 0.04 + P.wind * 0.06;
+  for (let i = 0; i < 12; i++) {
+    const y = (i / 12) * H * 0.28;
+    const waveAmp = 1.5 * (1 - i / 12);
+    ctx2d.beginPath();
+    ctx2d.strokeStyle = `hsla(200, 60%, 65%, ${lAlpha - i * 0.002})`;
+    ctx2d.lineWidth = 0.7 + (11 - i) * 0.08;
+    let startX = (-airStreamOffset * (0.8 + i * 0.05)) % W - W;
+    while (startX < W * 2) {
+      ctx2d.moveTo(startX, y + Math.sin((startX + time * 80) * 0.012) * waveAmp);
+      ctx2d.lineTo(startX + 120 + Math.random() * 60, y + Math.sin((startX + 130 + time * 80) * 0.012) * waveAmp);
+      startX += 180 + Math.random() * 80;
+    }
+    ctx2d.stroke();
+  }
+  ctx2d.restore();
+
+  // ── Turbulent eddies ──
+  if (P.wind > 0.05) {
+    ctx2d.save();
+    const tBase = H * 0.3;
+    const tHeight = H * 0.28;
+    for (let i = 0; i < Math.floor(4 + P.wind * 10); i++) {
+      const phase = i * 1.37 + time * 0.4;
+      const cx = ((i * 193 + airStreamOffset * 0.4) % W);
+      const cy = tBase + (Math.sin(phase) * 0.4 + 0.5) * tHeight;
+      const r = 8 + Math.sin(phase * 1.3) * 6;
+      ctx2d.beginPath();
+      ctx2d.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx2d.strokeStyle = `hsla(260, 40%, 60%, ${0.04 + P.wind * 0.06})`;
+      ctx2d.lineWidth = 1;
+      ctx2d.stroke();
+    }
+    ctx2d.restore();
+  }
+
+  // ── Moisture haze in boundary layer ──
+  if (P.moisture > 0.2) {
+    const blBase = H * 0.6;
+    const blH = H * 0.22;
+    const hazeGrad = ctx2d.createLinearGradient(0, blBase, 0, blBase + blH);
+    hazeGrad.addColorStop(0, `hsla(140, 50%, 60%, 0)`);
+    hazeGrad.addColorStop(0.4, `hsla(140, 50%, 55%, ${P.moisture * 0.06})`);
+    hazeGrad.addColorStop(1, `hsla(140, 40%, 40%, 0)`);
+    ctx2d.fillStyle = hazeGrad;
+    ctx2d.fillRect(0, blBase, W, blH);
+  }
+
+  // ── Moss surface ──
+  mossClumps.forEach(m => {
+    m.phase += m.phaseSpeed;
+    const breathe = Math.sin(m.phase + time) * 1.5;
+    const h = m.height + breathe + P.moisture * 5;
+    const lit = m.lightness + P.moisture * 10;
+
+    ctx2d.save();
+    // Main clump
+    const mGrad = ctx2d.createLinearGradient(m.x, m.baseH - h, m.x, m.baseH);
+    mGrad.addColorStop(0, `hsla(${m.hue}, ${m.saturation + P.moisture * 20}%, ${lit + 8}%, 0.9)`);
+    mGrad.addColorStop(1, `hsla(${m.hue - 10}, ${m.saturation}%, ${lit - 6}%, 0.95)`);
+    ctx2d.fillStyle = mGrad;
+
+    // Draw organic moss shape
+    ctx2d.beginPath();
+    ctx2d.moveTo(m.x - m.width / 2, m.baseH);
+    const steps = 8;
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const xp = m.x - m.width / 2 + t * m.width;
+      const noise = Math.sin(t * Math.PI * 3 + m.phase) * 2;
+      const yp = m.baseH - Math.sin(t * Math.PI) * h + noise;
+      ctx2d.lineTo(xp, yp);
+    }
+    ctx2d.lineTo(m.x + m.width / 2, m.baseH);
+    ctx2d.closePath();
+    ctx2d.fill();
+
+    // Highlight tip (dew)
+    if (P.moisture > 0.4 && Math.random() < 0.005) {
+      ctx2d.beginPath();
+      ctx2d.arc(m.x, m.baseH - h + breathe, 1.5, 0, Math.PI * 2);
+      ctx2d.fillStyle = `hsla(170, 70%, 85%, ${P.moisture * 0.6})`;
+      ctx2d.fill();
+    }
+    ctx2d.restore();
+  });
+
+  // ── Dew drops on surface ──
+  if (P.moisture > 0.3) {
+    for (let d = 0; d < Math.floor(P.moisture * 6); d++) {
+      const dx = ((d * 397 + time * 15) % W);
+      const dy = H * 0.78 + Math.sin(d * 2.1 + time) * H * 0.04;
+      const dr = 0.8 + Math.sin(d * 1.7 + time * 0.3) * 0.5;
+      ctx2d.beginPath();
+      ctx2d.arc(dx, dy, dr, 0, Math.PI * 2);
+      ctx2d.fillStyle = `hsla(185, 80%, 85%, ${P.moisture * 0.4})`;
+      ctx2d.fill();
+    }
+  }
+
+  // ── Update & draw particles ──
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy -= 0.01;
+    p.life -= p.decay;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    ctx2d.save();
+    ctx2d.globalAlpha = p.life * 0.7;
+    ctx2d.beginPath();
+    ctx2d.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx2d.fillStyle = p.color;
+    ctx2d.fill();
+    ctx2d.restore();
+  }
+
+  // ── Update & draw spores ──
+  for (let i = spores.length - 1; i >= 0; i--) {
+    const s = spores[i];
+    s.x += s.vx + Math.sin(time * 3 + i) * P.wind * 0.8;
+    s.y += s.vy;
+    s.vy += 0.015; // gravity
+    s.vx += (Math.random() - 0.5) * 0.1 * P.wind;
+    s.life -= s.decay;
+    if (s.life <= 0 || s.y > H) { spores.splice(i, 1); continue; }
+    ctx2d.save();
+    ctx2d.globalAlpha = s.life * 0.85;
+    ctx2d.beginPath();
+    ctx2d.arc(s.x, s.y, s.size * (0.5 + s.life * 0.5), 0, Math.PI * 2);
+    ctx2d.fillStyle = `hsla(${s.hue}, 70%, 75%, 1)`;
+    ctx2d.fill();
+    ctx2d.restore();
+  }
+
+  // ── Spore stalks (setae) emanating from moss ──
+  if (P.spore > 0.1) {
+    mossClumps.forEach((m, idx) => {
+      if (idx % 6 !== 0) return; // Only some clumps have setae
+      const setaH = 20 + P.spore * 50;
+      ctx2d.save();
+      ctx2d.strokeStyle = `hsla(80, 60%, 55%, ${P.spore * 0.6})`;
+      ctx2d.lineWidth = 0.8;
+      ctx2d.beginPath();
+      const capY = m.baseH - m.height - setaH;
+      ctx2d.moveTo(m.x, m.baseH - m.height);
+      ctx2d.lineTo(m.x + Math.sin(time * 0.5 + idx) * 3, capY);
+      ctx2d.stroke();
+      // Capsule
+      ctx2d.beginPath();
+      ctx2d.ellipse(m.x + Math.sin(time * 0.5 + idx) * 3, capY, 2, 4, 0, 0, Math.PI * 2);
+      ctx2d.fillStyle = `hsla(60, 65%, 60%, ${P.spore * 0.7})`;
+      ctx2d.fill();
+      ctx2d.restore();
+    });
+  }
+
+  requestAnimationFrame(drawFrame);
+}
+
+generateMoss();
+drawFrame();
+</script>
+</body>
+</html>

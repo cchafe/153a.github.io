@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Life in the Boundary Layer — Expanded</title>
+<style>
+  body {
+    background:#081412;
+    color:#d7fff2;
+    font-family: monospace;
+    padding:20px;
+  }
+  h1 { font-weight:normal; }
+  label { display:block; margin-top:12px; }
+  input[type=range] { width:300px; }
+  button {
+    background:#123c33;
+    color:#d7fff2;
+    border:1px solid #2f6f60;
+    padding:6px 12px;
+    margin-right:8px;
+    cursor:pointer;
+  }
+</style>
+</head>
+<body>
+
+<h1>Life in the Boundary Layer</h1>
+
+<button id="start">Start</button>
+<button id="stop">Stop</button>
+
+<label>Wind (Turbulence)
+<input type="range" id="wind" min="0" max="1" step="0.01" value="0.3"></label>
+
+<label>Humidity (Boundary Depth)
+<input type="range" id="humidity" min="0" max="1" step="0.01" value="0.6"></label>
+
+<label>CO₂ Enrichment
+<input type="range" id="co2" min="0" max="1" step="0.01" value="0.4"></label>
+
+<label>Reverb
+<input type="range" id="reverbMix" min="0" max="1" step="0.01" value="0.4"></label>
+
+<script>
+let ctx, master, dry, wet, convolver;
+let mossVoices = [];
+let laminarVoices = [];
+let windNoise;
+let running = false;
+
+function rand(a,b){ return Math.random()*(b-a)+a; }
+
+/* ------------------ REVERB ------------------ */
+
+function makeImpulse(sec=4,decay=3){
+  const len = ctx.sampleRate * sec;
+  const ir = ctx.createBuffer(2,len,ctx.sampleRate);
+  for(let ch=0; ch<2; ch++){
+    const d = ir.getChannelData(ch);
+    for(let i=0;i<len;i++){
+      d[i] = (Math.random()*2-1) * Math.pow(1-i/len,decay);
+    }
+  }
+  return ir;
+}
+
+/* ------------------ MOSS FM VOICE ------------------ */
+
+function mossVoice(){
+  const carrier = ctx.createOscillator();
+  const mod = ctx.createOscillator();
+  const modGain = ctx.createGain();
+  const amp = ctx.createGain();
+  const pan = ctx.createStereoPanner();
+  const formant = ctx.createBiquadFilter();
+
+  carrier.type="sine";
+  mod.type="sine";
+  formant.type="bandpass";
+  formant.Q.value=10;
+
+  mod.connect(modGain);
+  modGain.connect(carrier.frequency);
+  carrier.connect(formant);
+  formant.connect(amp);
+  amp.connect(pan);
+  pan.connect(dry);
+  pan.connect(wet);
+
+  carrier.start();
+  mod.start();
+
+  return {carrier,mod,modGain,amp,pan,formant};
+}
+
+/* ------------------ LAMINAR HARMONIC LAYER ------------------ */
+
+function laminarVoice(freq){
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const pan = ctx.createStereoPanner();
+
+  osc.type="triangle";
+  osc.frequency.value=freq;
+
+  gain.gain.value=0.03;
+
+  osc.connect(gain);
+  gain.connect(pan);
+  pan.connect(dry);
+  pan.connect(wet);
+
+  osc.start();
+
+  return {osc,gain,pan};
+}
+
+/* ------------------ TURBULENCE ------------------ */
+
+function makeWind(){
+  const buffer = ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for(let i=0;i<data.length;i++)
+    data[i]=Math.random()*2-1;
+
+  const src = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  const pan = ctx.createStereoPanner();
+
+  src.buffer=buffer;
+  src.loop=true;
+
+  filter.type="bandpass";
+  filter.frequency.value=900;
+  filter.Q.value=0.7;
+
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(pan);
+  pan.connect(dry);
+  pan.connect(wet);
+
+  src.start();
+
+  return {gain,pan,filter};
+}
+
+/* ------------------ SPOROPHYTE BURST ------------------ */
+
+function burst(){
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const pan = ctx.createStereoPanner();
+
+  osc.type="sawtooth";
+  osc.frequency.setValueAtTime(300,ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(1800,ctx.currentTime+0.5);
+
+  gain.gain.setValueAtTime(0.0001,ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.4,ctx.currentTime+0.1);
+  gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.7);
+
+  pan.pan.setValueAtTime(rand(-1,1),ctx.currentTime);
+  pan.pan.linearRampToValueAtTime(rand(-1,1),ctx.currentTime+0.7);
+
+  osc.connect(gain);
+  gain.connect(pan);
+  pan.connect(dry);
+  pan.connect(wet);
+
+  osc.start();
+  osc.stop(ctx.currentTime+0.8);
+}
+
+/* ------------------ ENGINE UPDATE ------------------ */
+
+function update(){
+  const wind = parseFloat(windSlider.value);
+  const hum = parseFloat(humiditySlider.value);
+  const co2 = parseFloat(co2Slider.value);
+
+  mossVoices.forEach((v,i)=>{
+    const base = 140 + i*30;
+    v.carrier.frequency.value = base * (1+co2*0.5);
+    v.mod.frequency.value = base*2;
+    v.modGain.gain.value = 40 + wind*200;
+    v.amp.gain.value = 0.05 + hum*0.12;
+    v.formant.frequency.value = 600 + hum*1000;
+
+    v.pan.pan.value = Math.sin(ctx.currentTime*0.2+i);
+  });
+
+  laminarVoices.forEach((v,i)=>{
+    v.gain.gain.value = 0.02 + hum*0.05;
+    v.pan.pan.value = Math.sin(ctx.currentTime*0.05+i*0.5);
+  });
+
+  windNoise.gain.gain.value = wind*0.25;
+  windNoise.pan.pan.value = Math.sin(ctx.currentTime*0.4);
+}
+
+/* ------------------ START / STOP ------------------ */
+
+function start(){
+  if(running) return;
+  running=true;
+
+  ctx = new (window.AudioContext||window.webkitAudioContext)();
+
+  master=ctx.createGain();
+  dry=ctx.createGain();
+  wet=ctx.createGain();
+  convolver=ctx.createConvolver();
+
+  convolver.buffer=makeImpulse();
+  wet.connect(convolver);
+  convolver.connect(master);
+  dry.connect(master);
+  master.connect(ctx.destination);
+
+  mossVoices=[];
+  for(let i=0;i<6;i++)
+    mossVoices.push(mossVoice());
+
+  laminarVoices=[];
+  const ratios=[1,1.25,1.5,2];
+  ratios.forEach(r=>{
+    laminarVoices.push(laminarVoice(220*r));
+  });
+
+  windNoise=makeWind();
+
+  setInterval(update,100);
+  setInterval(()=>{ if(Math.random()<0.5) burst(); },5000);
+}
+
+function stop(){
+  if(!running) return;
+  ctx.close();
+  running=false;
+}
+
+/* ------------------ UI ------------------ */
+
+const windSlider=document.getElementById("wind");
+const humiditySlider=document.getElementById("humidity");
+const co2Slider=document.getElementById("co2");
+const reverbSlider=document.getElementById("reverbMix");
+
+document.getElementById("start").onclick=start;
+document.getElementById("stop").onclick=stop;
+
+reverbSlider.oninput=()=>{
+  if(!ctx) return;
+  wet.gain.value=parseFloat(reverbSlider.value);
+  dry.gain.value=1-parseFloat(reverbSlider.value);
+};
+</script>
+
+</body>
+</html>
