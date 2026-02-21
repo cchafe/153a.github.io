@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FM Vocal Synthesizer</title>
+    <title>Remote Control - Glitch-Free FM Vocal Synthesizer</title>
     <style>
         * {
             box-sizing: border-box;
@@ -152,6 +152,30 @@
         .slider-container {
             width: 100%;
             max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .slider-value {
+            color: #4CAF50;
+            font-family: 'Courier New', monospace;
+            min-width: 60px;
+            text-align: right;
         }
         
         .slider {
@@ -286,7 +310,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>FM Vocal Synthesizer - "Ahhh" Voice</h1>
+        <h1>Remote Control - Glitch-Free FM Vocal Synthesizer</h1>
         
         <div class="controls">
             <div class="button-container">
@@ -634,22 +658,236 @@
                   <!-- Red arrow for "Stop Audio" (at end of blue envelope) -->
                   <line class="rvClick" x1="1238.3" y1="905" x2="1238.3" y2="995"/>
                   <line class="arrow" x1="1238.3" y1="905" x2="1238.3" y2="890" marker-end="url(#arrowHead)"/>
-                  <text class="warn" x="1248.3" y="914">Stop Audio</text>
+                  <text class="warn" x="1238.3" y="914">Stop Audio</text>
                 </svg>
             </div>
             
             <div class="slider-container">
-                <input type="range" id="masterSlider" class="slider" min="-100" max="100" value="-50">
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Volume</span>
+                        <span class="slider-value" id="volumeValue">0%</span>
+                    </div>
+                    <input type="range" id="volumeSlider" class="slider" min="0" max="100" value="0">
+                </div>
+                
+                <div class="slider-group">
+                    <div class="slider-label">
+                        <span>Expression (Pitch/Pan/Timbre)</span>
+                        <span class="slider-value" id="expressionValue">-69.0</span>
+                    </div>
+                    <input type="range" id="expressionSlider" class="slider" min="0" max="10000" value="5000" step="1">
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        class FMVocalSynthesizer {
+        // Glitch-Free FM Vocal Synthesis AudioWorklet Code
+        const synthWorkletCode = `
+class FMVocalSynthesisProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    
+    this.sampleRate = 48000;
+    this.masterPhase = 0.0;
+    
+    // Oscillator bank - 6 oscillators for 3 formants (2 per formant)
+    this.oscillators = [];
+    for (let i = 0; i < 6; i++) {
+      this.oscillators.push({
+        harmonicNumber: 1,
+        amplitude: 0.0,
+        modulationIndex: 0.0,
+        phase: 0.0,
+        active: false
+      });
+    }
+    
+    // "Ahhh" vowel formant parameters
+    this.formants = [
+      { targetFreq: 730, bandwidth: 80, amplitude: 1.0 },   // F1
+      { targetFreq: 1090, bandwidth: 90, amplitude: 0.8 },  // F2
+      { targetFreq: 2440, bandwidth: 120, amplitude: 0.6 }  // F3
+    ];
+    
+    // Cross-fade state for each formant
+    this.crossFadeState = [];
+    for (let i = 0; i < 3; i++) {
+      this.crossFadeState.push({
+        lowerHarmonic: 1,
+        upperHarmonic: 2,
+        lowerOscIndex: i * 2,
+        upperOscIndex: i * 2 + 1,
+        crossFadeRatio: 0.0
+      });
+    }
+    
+    // Synthesis parameters
+    this.fundamentalFreq = 261.63; // C3
+    this.baseFreq = 261.63;
+    this.masterVolume = 0.0;
+    this.expressionValue = -69.0; // Starting value
+    this.expressionGain = 0.5; // Starting gain (middle of range)
+    
+    // Base formant frequencies for "ahhh"
+    this.baseFormants = [730, 1090, 2440];
+    
+    // Message handling
+    this.port.onmessage = (event) => {
+      this.handleMessage(event.data);
+    };
+    
+    // Initialize with starting values
+    this.updateExpressionParameters();
+  }
+  
+  handleMessage(data) {
+    switch (data.type) {
+      case 'setVolume':
+        this.masterVolume = data.value;
+        break;
+      case 'setExpression':
+        this.expressionValue = data.value;
+        this.updateExpressionParameters();
+        break;
+    }
+  }
+  
+  updateExpressionParameters() {
+    // Rescale from -79 to -59 range to 0 to 1 range
+    const normalizedValue = (this.expressionValue + 79) / 20; // 0 to 1
+    const scaledValue = (normalizedValue * 2) - 1; // -1 to +1
+    
+    // Expression gain: -79 = silent (0.0), -59 = full volume (1.0)
+    this.expressionGain = normalizedValue;
+    
+    // Pitch variation: ±150 Hz around C3 (using scaled value for full range)
+    const pitchOffset = scaledValue * 150;
+    this.fundamentalFreq = Math.max(50, this.baseFreq + pitchOffset);
+    
+    // Formant frequency shifts for timbre variation
+    for (let i = 0; i < 3; i++) {
+      const formantShift = pitchOffset * 0.5; // Subtle formant tracking
+      this.formants[i].targetFreq = Math.max(200, this.baseFormants[i] + formantShift);
+    }
+    
+    // Modulation index variation for different timbres (using scaled value)
+    const baseModIndices = [50, 30, 20];
+    const mod1 = Math.max(1, baseModIndices[0] + (scaledValue * 400));
+    const mod2 = Math.max(1, baseModIndices[1] + (Math.sign(scaledValue) * Math.pow(Math.abs(scaledValue), 1.5) * 300));
+    const mod3 = Math.max(1, baseModIndices[2] + (Math.sin(scaledValue * Math.PI) * 200) - (scaledValue * 100));
+    
+    // Convert to bandwidth for the glitch-free algorithm
+    this.formants[0].bandwidth = Math.max(20, mod1 * 2);
+    this.formants[1].bandwidth = Math.max(20, mod2 * 2);
+    this.formants[2].bandwidth = Math.max(20, mod3 * 2);
+  }
+  
+  updateMasterPhase(frameSize) {
+    const phaseIncrement = this.fundamentalFreq / this.sampleRate;
+    return { currentFreq: this.fundamentalFreq, phaseIncrement };
+  }
+  
+  updateCrossFadeParameters(currentFreq) {
+    for (let f = 0; f < 3; f++) {
+      const formant = this.formants[f];
+      const state = this.crossFadeState[f];
+      
+      const targetRatio = formant.targetFreq / currentFreq;
+      
+      state.lowerHarmonic = Math.floor(targetRatio);
+      state.upperHarmonic = Math.ceil(targetRatio);
+      
+      if (state.lowerHarmonic < 1) state.lowerHarmonic = 1;
+      if (state.upperHarmonic < 1) state.upperHarmonic = 1;
+      
+      if (state.upperHarmonic === state.lowerHarmonic) {
+        state.crossFadeRatio = 0.0;
+      } else {
+        state.crossFadeRatio = (targetRatio - state.lowerHarmonic) / 
+                              (state.upperHarmonic - state.lowerHarmonic);
+      }
+      
+      const lowerOsc = this.oscillators[state.lowerOscIndex];
+      const upperOsc = this.oscillators[state.upperOscIndex];
+      
+      lowerOsc.harmonicNumber = state.lowerHarmonic;
+      upperOsc.harmonicNumber = state.upperHarmonic;
+      
+      const lowerAmp = (1.0 - state.crossFadeRatio) * formant.amplitude;
+      const upperAmp = state.crossFadeRatio * formant.amplitude;
+      
+      lowerOsc.amplitude = lowerAmp;
+      upperOsc.amplitude = upperAmp;
+      
+      const modIndex = Math.min(formant.bandwidth / 100.0, 4.0);
+      lowerOsc.modulationIndex = modIndex;
+      upperOsc.modulationIndex = modIndex;
+      
+      lowerOsc.active = lowerAmp > 0.001;
+      upperOsc.active = upperAmp > 0.001;
+    }
+  }
+  
+  generateUPHOSample(oscIndex, masterPhase, modulator) {
+    const osc = this.oscillators[oscIndex];
+    if (!osc.active) return 0.0;
+    
+    const harmonicPhase = (masterPhase * osc.harmonicNumber) % 1.0;
+    const phaseRadians = 2.0 * Math.PI * harmonicPhase;
+    
+    const modulatedPhase = phaseRadians + (modulator * osc.modulationIndex);
+    
+    return osc.amplitude * Math.sin(modulatedPhase);
+  }
+  
+  process(inputs, outputs, parameters) {
+    const output = outputs[0];
+    const frameSize = output[0].length;
+    
+    if (this.sampleRate !== sampleRate) {
+      this.sampleRate = sampleRate;
+    }
+    
+    const { currentFreq, phaseIncrement } = this.updateMasterPhase(frameSize);
+    this.updateCrossFadeParameters(currentFreq);
+    
+    for (let sample = 0; sample < frameSize; sample++) {
+      this.masterPhase += phaseIncrement;
+      if (this.masterPhase >= 1.0) {
+        this.masterPhase -= 1.0;
+      }
+      
+      const modulatorPhase = 2.0 * Math.PI * this.masterPhase;
+      const modulator = Math.sin(modulatorPhase);
+      
+      let outputSample = 0.0;
+      for (let i = 0; i < this.oscillators.length; i++) {
+        outputSample += this.generateUPHOSample(i, this.masterPhase, modulator);
+      }
+      
+      // Apply master volume, expression gain, and clipping protection
+      outputSample *= this.masterVolume * this.expressionGain * 0.3;
+      outputSample = Math.max(-1.0, Math.min(1.0, outputSample));
+      
+      for (let channel = 0; channel < output.length; channel++) {
+        output[channel][sample] = outputSample;
+      }
+    }
+    
+    return true;
+  }
+}
+
+registerProcessor('fm-vocal-synthesis', FMVocalSynthesisProcessor);
+        `;
+
+        class RemoteControlSynthesizer {
             constructor() {
                 this.audioContext = null;
+                this.synthNode = null;
                 this.isPlaying = false;
-                this.masterGain = null;
                 this.panNode = null;
                 
                 // Timeline management
@@ -659,27 +897,31 @@
                 this.totalDuration = 8.25 * 60; // 8:15 total (including -15s pre-roll)
                 this.preRollDuration = 15; // 15 seconds before Cue 1
                 
-                // FM Voice Algorithm: 3 carriers + 1 shared modulator
-                this.modulator = null;
-                this.modulatorGains = []; // Separate modulation gains for each carrier
-                this.carriers = [];
-                this.carrierGains = [];
-                this.carrierFilters = [];
+                // Expression parameters - new narrower range with high resolution
+                this.currentExpression = -69; // Starting at -69 (middle of range)
+                this.currentVolume = 0; // Starting at 0%
                 
-                // Base parameters for C3 (261.63 Hz)
-                this.baseFreq = 261.63;
-                this.baseGain = 0.75; // Center of 0.5-1.0 range
-                this.basePan = 0.0;
-                
-                // Fixed "ahhh" vowel formant frequencies and amplitudes
-                this.formantFreqs = [730, 1090, 2440]; // F1, F2, F3 for "ahhh"
-                this.formantAmps = [1.0, 0.8, 0.3];
-                
-                // Base modulation indices for each carrier
-                this.baseModIndices = [50, 30, 20];
-                this.currentModIndices = [...this.baseModIndices];
+                // Parameter update interval
+                this.parameterUpdateInterval = null;
                 
                 this.setupEventListeners();
+                this.initializeDisplays();
+            }
+            
+            initializeDisplays() {
+                // Initialize displays with starting values
+                document.getElementById('volumeValue').textContent = '0%';
+                document.getElementById('expressionValue').textContent = '-69.0';
+            }
+            
+            // Convert slider value (0-10000) to expression range (-72 to -66)
+            sliderToExpression(sliderValue) {
+                return -72 + (sliderValue / 10000) * 6; // Maps 0-10000 to -72 to -66
+            }
+            
+            // Convert expression value (-72 to -66) to slider value (0-10000)
+            expressionToSlider(expressionValue) {
+                return ((expressionValue + 72) / 6) * 10000; // Maps -72 to -66 to 0-10000
             }
             
             async initAudio() {
@@ -688,62 +930,29 @@
                         sampleRate: 48000
                     });
                     
-                    // Create master output chain
-                    this.masterGain = this.audioContext.createGain();
+                    // Create worklet blob and load
+                    const blob = new Blob([synthWorkletCode], { type: 'application/javascript' });
+                    const workletURL = URL.createObjectURL(blob);
+                    
+                    await this.audioContext.audioWorklet.addModule(workletURL);
+                    
+                    // Create audio nodes
+                    this.synthNode = new AudioWorkletNode(this.audioContext, 'fm-vocal-synthesis');
                     this.panNode = this.audioContext.createStereoPanner();
                     
-                    // Create shared modulator at pitch frequency
-                    this.modulator = this.audioContext.createOscillator();
-                    this.modulator.type = 'sine';
-                    this.modulator.frequency.setValueAtTime(this.baseFreq, this.audioContext.currentTime);
-                    
-                    // Create 3 carriers for formant synthesis with separate modulation gains
-                    for (let i = 0; i < 3; i++) {
-                        const carrier = this.audioContext.createOscillator();
-                        const carrierGain = this.audioContext.createGain();
-                        const carrierFilter = this.audioContext.createBiquadFilter();
-                        const modulatorGain = this.audioContext.createGain();
-                        
-                        carrier.type = 'sine';
-                        carrierFilter.type = 'bandpass';
-                        carrierFilter.Q.setValueAtTime(8, this.audioContext.currentTime);
-                        
-                        // Set formant frequencies and amplitudes
-                        const formantFreq = this.formantFreqs[i];
-                        const formantAmp = this.formantAmps[i] * 0.08;
-                        
-                        carrier.frequency.setValueAtTime(formantFreq, this.audioContext.currentTime);
-                        carrierGain.gain.setValueAtTime(formantAmp, this.audioContext.currentTime);
-                        carrierFilter.frequency.setValueAtTime(formantFreq, this.audioContext.currentTime);
-                        modulatorGain.gain.setValueAtTime(this.baseModIndices[i], this.audioContext.currentTime);
-                        
-                        // Connect modulator to each carrier frequency through separate gain
-                        this.modulator.connect(modulatorGain);
-                        modulatorGain.connect(carrier.frequency);
-                        
-                        // Connect carrier through filter and gain to master
-                        carrier.connect(carrierFilter);
-                        carrierFilter.connect(carrierGain);
-                        carrierGain.connect(this.masterGain);
-                        
-                        this.carriers.push(carrier);
-                        this.carrierGains.push(carrierGain);
-                        this.carrierFilters.push(carrierFilter);
-                        this.modulatorGains.push(modulatorGain);
-                        
-                        carrier.start();
-                    }
-                    
-                    // Connect master chain
-                    this.masterGain.connect(this.panNode);
+                    // Connect audio chain: synth -> pan -> destination
+                    // Volume is handled inside the worklet
+                    this.synthNode.connect(this.panNode);
                     this.panNode.connect(this.audioContext.destination);
                     
-                    // Set initial values based on starting slider position
-                    const startingSliderValue = -50;
-                    this.updateParametersForAudio(startingSliderValue);
+                    // Clean up blob URL
+                    URL.revokeObjectURL(workletURL);
                     
-                    // Start modulator
-                    this.modulator.start();
+                    // Set initial parameters immediately after audio initialization
+                    this.updateParameters();
+                    
+                    // Start parameter update loop at 5ms intervals
+                    this.startParameterUpdates();
                     
                     return true;
                 } catch (error) {
@@ -752,10 +961,25 @@
                 }
             }
             
+            startParameterUpdates() {
+                // Update parameters every 5ms for smooth ramping
+                this.parameterUpdateInterval = setInterval(() => {
+                    this.updateParameters();
+                }, 5);
+            }
+            
+            stopParameterUpdates() {
+                if (this.parameterUpdateInterval) {
+                    clearInterval(this.parameterUpdateInterval);
+                    this.parameterUpdateInterval = null;
+                }
+            }
+            
             setupEventListeners() {
                 const pieceBtn = document.getElementById('pieceBtn');
                 const toggleBtn = document.getElementById('toggleBtn');
-                const masterSlider = document.getElementById('masterSlider');
+                const volumeSlider = document.getElementById('volumeSlider');
+                const expressionSlider = document.getElementById('expressionSlider');
                 const timelineDisplay = document.getElementById('timelineDisplay');
                 
                 pieceBtn.addEventListener('click', () => this.togglePiece());
@@ -768,21 +992,64 @@
                 const cueMarkers = document.querySelectorAll('.timeline-marker');
                 cueMarkers.forEach(marker => {
                     marker.addEventListener('click', (e) => {
-                        e.stopPropagation(); // Prevent timeline click
+                        e.stopPropagation();
                         const targetTime = parseFloat(marker.dataset.time);
                         this.jumpToTime(targetTime);
                     });
                 });
                 
-                // Slider updates at 1ms intervals
-                let lastSliderUpdate = 0;
-                masterSlider.addEventListener('input', (e) => {
-                    const now = Date.now();
-                    if (now - lastSliderUpdate >= 1) {
-                        this.updateParameters(parseFloat(e.target.value));
-                        lastSliderUpdate = now;
-                    }
+                // Volume slider
+                volumeSlider.addEventListener('input', (e) => {
+                    this.currentVolume = parseFloat(e.target.value) / 100; // 0-1 range
+                    document.getElementById('volumeValue').textContent = Math.round(parseFloat(e.target.value)) + '%';
+                    // Parameters will be updated by the 5ms interval
                 });
+                
+                // Expression slider with high resolution
+                expressionSlider.addEventListener('input', (e) => {
+                    const sliderValue = parseFloat(e.target.value);
+                    this.currentExpression = this.sliderToExpression(sliderValue);
+                    document.getElementById('expressionValue').textContent = this.currentExpression.toFixed(1);
+                    // Parameters will be updated by the 5ms interval
+                });
+            }
+            
+            calculatePanValue(normalizedValue) {
+                // Pan mapping using rescaled value (0 to 1 range)
+                // Convert back to -1 to +1 for pan calculation
+                const scaledValue = (normalizedValue * 2) - 1; // -1 to +1
+                
+                // Triangle wave pattern (matching original)
+                if (scaledValue <= 0) {
+                    return -1 + (scaledValue + 1) * 2;
+                } else {
+                    return 1 - (scaledValue * 2);
+                }
+            }
+            
+            updateParameters() {
+                if (this.synthNode && this.panNode && this.isPlaying) {
+                    const currentTime = this.audioContext.currentTime;
+                    const rampTime = 0.005; // 5ms ramp time
+                    
+                    // Send volume to worklet
+                    this.synthNode.port.postMessage({
+                        type: 'setVolume',
+                        value: this.currentVolume
+                    });
+                    
+                    // Send expression to worklet (this handles internal synthesis parameters)
+                    this.synthNode.port.postMessage({
+                        type: 'setExpression',
+                        value: this.currentExpression
+                    });
+                    
+                    // Update panning with smooth ramping
+                    // Rescale from -79 to -59 range to 0 to 1 range (keep original mapping)
+                    const normalizedValue = (this.currentExpression + 79) / 20; // 0 to 1
+                    const newPan = this.calculatePanValue(normalizedValue);
+                    this.panNode.pan.rampToValueAtTime(newPan, currentTime + rampTime);
+                }
             }
             
             handleTimelineClick(e) {
@@ -792,7 +1059,6 @@
                 const clickX = e.clientX - rect.left;
                 const percentage = clickX / rect.width;
                 
-                // Convert percentage to time (relative to Cue 1)
                 const totalTimelineSeconds = this.totalDuration;
                 const elapsedSeconds = percentage * totalTimelineSeconds;
                 const timeFromCue1 = elapsedSeconds - this.preRollDuration;
@@ -802,15 +1068,11 @@
             
             jumpToTime(timeFromCue1) {
                 if (!this.pieceStarted) {
-                    // Start the piece if not already started
                     this.togglePiece();
                 }
                 
-                // Calculate new piece start time to achieve the target time
                 const targetElapsed = timeFromCue1 + this.preRollDuration;
                 this.pieceStartTime = Date.now() - (targetElapsed * 1000);
-                
-                // Update display immediately
                 this.updateTimeline();
             }
             
@@ -855,20 +1117,19 @@
             }
             
             stopAudio() {
+                this.stopParameterUpdates();
                 if (this.audioContext) {
                     this.audioContext.close();
                     this.audioContext = null;
-                    this.carriers = [];
-                    this.carrierGains = [];
-                    this.carrierFilters = [];
-                    this.modulatorGains = [];
+                    this.synthNode = null;
+                    this.panNode = null;
                 }
             }
             
             startTimelineUpdate() {
                 this.timelineInterval = setInterval(() => {
                     this.updateTimeline();
-                }, 100); // Update every 100ms for smooth progress
+                }, 100);
             }
             
             stopTimelineUpdate() {
@@ -881,21 +1142,17 @@
             updateTimeline() {
                 if (!this.pieceStarted || !this.pieceStartTime) return;
                 
-                const elapsed = (Date.now() - this.pieceStartTime) / 1000; // seconds
-                const timeFromStart = elapsed - this.preRollDuration; // relative to Cue 1 (0:00)
+                const elapsed = (Date.now() - this.pieceStartTime) / 1000;
+                const timeFromStart = elapsed - this.preRollDuration;
                 
-                // Calculate progress percentage (0-100%)
                 const progress = Math.min(100, Math.max(0, (elapsed / this.totalDuration) * 100));
                 
-                // Update progress bar
                 const progressBar = document.getElementById('timelineProgress');
                 progressBar.style.width = `${progress}%`;
                 
-                // Update time display
                 const currentTime = document.getElementById('currentTime');
                 currentTime.textContent = this.formatTime(timeFromStart);
                 
-                // Update status based on current time
                 const pieceStatus = document.getElementById('pieceStatus');
                 if (timeFromStart < 0) {
                     pieceStatus.textContent = `Pre-roll (${Math.abs(timeFromStart).toFixed(1)}s to Cue 1)`;
@@ -921,7 +1178,6 @@
                     pieceStatus.textContent = 'Cue 10: Finish together';
                 }
                 
-                // Auto-stop at end
                 if (elapsed >= this.totalDuration) {
                     this.togglePiece();
                 }
@@ -942,72 +1198,11 @@
                 progressBar.style.width = '0%';
                 currentTime.textContent = '-0:15';
             }
-            
-            calculatePanValue(normalizedValue) {
-                // Pan mapping: L (-1) at min, R (+1) at center (0), L (-1) at max
-                // This creates a triangle wave pattern
-                if (normalizedValue <= 0) {
-                    // From -1 to 0: pan goes from -1 to +1
-                    return -1 + (normalizedValue + 1) * 2;
-                } else {
-                    // From 0 to +1: pan goes from +1 to -1
-                    return 1 - (normalizedValue * 2);
-                }
-            }
-            
-            updateParameters(sliderValue) {
-                // Apply to audio if playing
-                if (this.audioContext && this.isPlaying) {
-                    this.updateParametersForAudio(sliderValue);
-                }
-            }
-            
-            updateParametersForAudio(sliderValue) {
-                const now = this.audioContext.currentTime;
-                const rampTime = now + 0.01; // 10ms ramp for smoothness
-                
-                // Normalize slider value from -100 to +100 range
-                const normalizedValue = sliderValue / 100; // -1 to +1
-                
-                // MUCH LARGER pitch variation (±150 Hz)
-                const pitchOffset = normalizedValue * 150;
-                const newFreq = Math.max(50, this.baseFreq + pitchOffset);
-                
-                // Update modulator frequency (fundamental)
-                this.modulator.frequency.exponentialRampToValueAtTime(newFreq, rampTime);
-                
-                // Loudness variation between 0.5 and 1.0 (range of 0.5)
-                const gainOffset = normalizedValue * 0.25; // ±0.25 around center of 0.75
-                const newGain = Math.max(0.5, Math.min(1.0, this.baseGain + gainOffset));
-                this.masterGain.gain.exponentialRampToValueAtTime(newGain, rampTime);
-                
-                // Triangle wave panning: L → R → L
-                const newPan = this.calculatePanValue(normalizedValue);
-                this.panNode.pan.setValueAtTime(newPan, rampTime);
-                
-                // Different non-parallel mappings for each carrier's modulation index
-                // DOUBLED the maximum ranges for more extreme FM effects
-                const mod1 = Math.max(1, this.baseModIndices[0] + (normalizedValue * 400));
-                const mod2 = Math.max(1, this.baseModIndices[1] + (Math.sign(normalizedValue) * Math.pow(Math.abs(normalizedValue), 1.5) * 300));
-                const mod3 = Math.max(1, this.baseModIndices[2] + (Math.sin(normalizedValue * Math.PI) * 200) - (normalizedValue * 100));
-                
-                // Update modulation indices
-                this.modulatorGains[0].gain.exponentialRampToValueAtTime(mod1, rampTime);
-                this.modulatorGains[1].gain.exponentialRampToValueAtTime(mod2, rampTime);
-                this.modulatorGains[2].gain.exponentialRampToValueAtTime(mod3, rampTime);
-                
-                // Update carrier frequencies slightly based on pitch
-                for (let i = 0; i < 3; i++) {
-                    const carrierFreq = Math.max(20, this.formantFreqs[i] + (pitchOffset * 0.5));
-                    this.carriers[i].frequency.exponentialRampToValueAtTime(carrierFreq, rampTime);
-                    this.carrierFilters[i].frequency.exponentialRampToValueAtTime(carrierFreq, rampTime);
-                }
-            }
         }
         
         // Initialize the synthesizer when page loads
         window.addEventListener('load', () => {
-            new FMVocalSynthesizer();
+            new RemoteControlSynthesizer();
         });
     </script>
 </body>
