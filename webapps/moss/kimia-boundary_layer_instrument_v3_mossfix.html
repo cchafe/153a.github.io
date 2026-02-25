@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Boundary Layer Instrument (Gathering Moss Sonification)</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:#0b0c10; color:#e8e8ea; }
+    header { padding:18px 18px 8px; border-bottom:1px solid #222; }
+    h1 { margin:0 0 6px; font-size:18px; font-weight:650; }
+    p  { margin:0; opacity:.8; font-size:13px; line-height:1.35; }
+    main { padding:14px 18px 18px; display:grid; gap:14px; grid-template-columns: 1fr; max-width: 980px; }
+    .row { display:grid; gap:12px; grid-template-columns: 1fr; }
+    @media (min-width: 860px){ .row { grid-template-columns: 1fr 1fr; } }
+    .card { background:#0f1117; border:1px solid #222; border-radius:14px; padding:14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .card h2 { margin:0 0 10px; font-size:14px; letter-spacing:.2px; opacity:.9; }
+    .sub { margin-top:14px; padding-top:10px; border-top:1px solid #1f2430; }
+    .ctrl { display:grid; grid-template-columns: 160px 1fr 70px; align-items:center; gap:10px; margin:10px 0; }
+    .ctrl label { font-size:12px; opacity:.85; }
+    input[type="range"] { width:100%; }
+    .val { font-variant-numeric: tabular-nums; font-size:12px; opacity:.8; text-align:right; }
+    button { appearance:none; border:1px solid #2a2f3a; background:#141824; color:#e8e8ea; padding:10px 12px; border-radius:12px; font-weight:650; cursor:pointer; }
+    button:hover { background:#171c2a; }
+    .hint { margin-top:10px; font-size:12px; opacity:.75; line-height:1.35; }
+    .kbd { display:inline-block; padding:2px 8px; border:1px solid #2a2f3a; border-bottom-width:2px; border-radius:8px; font-size:12px; opacity:.9; background:#0c0f18; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Boundary Layer Instrument</h1>
+  <p>Standalone Web Audio instrument inspired by the “boundary layer” chapter. Click Start Audio first.</p>
+</header>
+
+<main>
+  <div class="card">
+    <button id="startBtn">Start Audio</button>
+    <button id="stopBtn" disabled style="margin-left:10px;">Stop</button>
+    <div class="hint">
+      Play controls:
+      <span class="kbd">Space</span> Kite “ascend” (hold) ·
+      <span class="kbd">Click</span> Spore burst ·
+      <span class="kbd">Z/X</span> Lower/Raise Kite altitude
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <h2>Microclimate (Boundary Layer + Moss)</h2>
+
+      <div class="ctrl"><label>Master</label><input id="master" type="range" min="0" max="1" step="0.001" value="0.7"><div class="val" id="masterV"></div></div>
+      <div class="ctrl"><label>Boundary depth</label><input id="depth" type="range" min="0" max="1" step="0.001" value="0.55"><div class="val" id="depthV"></div></div>
+      <div class="ctrl"><label>Humidity</label><input id="humidity" type="range" min="0" max="1" step="0.001" value="0.65"><div class="val" id="humidityV"></div></div>
+      <div class="ctrl"><label>Temperature (warmth)</label><input id="temp" type="range" min="0" max="1" step="0.001" value="0.5"><div class="val" id="tempV"></div></div>
+      <div class="ctrl"><label>CO₂ / decay</label><input id="co2" type="range" min="0" max="1" step="0.001" value="0.3"><div class="val" id="co2V"></div></div>
+
+      <div class="ctrl"><label>Reverb wet</label><input id="reverb" type="range" min="0" max="1" step="0.001" value="0.25"><div class="val" id="reverbV"></div></div>
+      <div class="ctrl"><label>Stereo width</label><input id="width" type="range" min="0" max="1" step="0.001" value="0.65"><div class="val" id="widthV"></div></div>
+
+      <div class="sub">
+        <h2 style="margin:0 0 10px;">Moss (breath + heartbeat)</h2>
+        <div class="ctrl"><label>Moss volume</label><input id="mossVol" type="range" min="0" max="1" step="0.001" value="0.55"><div class="val" id="mossVolV"></div></div>
+        <div class="ctrl"><label>Breath rate</label><input id="breath" type="range" min="0" max="1" step="0.001" value="0.35"><div class="val" id="breathV"></div></div>
+        <div class="ctrl"><label>Heart rate</label><input id="heart" type="range" min="0" max="1" step="0.001" value="0.25"><div class="val" id="heartV"></div></div>
+        <div class="ctrl"><label>Delicacy</label><input id="delicacy" type="range" min="0" max="1" step="0.001" value="0.65"><div class="val" id="delicacyV"></div></div>
+        <div class="hint">Tip: raise <b>Moss volume</b> and lower <b>Delicacy</b> if you want it more present.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Airflow (Laminar + Turbulent)</h2>
+
+      <div class="ctrl"><label>Airflow volume</label><input id="airVol" type="range" min="0" max="1" step="0.001" value="0.75"><div class="val" id="airVolV"></div></div>
+
+      <div class="ctrl"><label>Wind speed</label><input id="wind" type="range" min="0" max="1" step="0.001" value="0.35"><div class="val" id="windV"></div></div>
+      <div class="ctrl"><label>Laminar smoothness</label><input id="laminar" type="range" min="0" max="1" step="0.001" value="0.65"><div class="val" id="laminarV"></div></div>
+      <div class="ctrl"><label>Turbulence</label><input id="turb" type="range" min="0" max="1" step="0.001" value="0.35"><div class="val" id="turbV"></div></div>
+      <div class="ctrl"><label>Surface roughness</label><input id="rough" type="range" min="0" max="1" step="0.001" value="0.4"><div class="val" id="roughV"></div></div>
+
+      <div class="sub">
+        <h2 style="margin:0 0 10px;">Spores (events)</h2>
+        <div class="ctrl"><label>Spores volume</label><input id="spVol" type="range" min="0" max="1" step="0.001" value="0.75"><div class="val" id="spVolV"></div></div>
+        <div class="ctrl"><label>Spore rate</label><input id="spRate" type="range" min="0" max="1" step="0.001" value="0.25"><div class="val" id="spRateV"></div></div>
+        <div class="ctrl"><label>Spore size</label><input id="spSize" type="range" min="0" max="1" step="0.001" value="0.35"><div class="val" id="spSizeV"></div></div>
+        <div class="ctrl"><label>Dispersion width</label><input id="spWidth" type="range" min="0" max="1" step="0.001" value="0.65"><div class="val" id="spWidthV"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Kite (lead voice)</h2>
+    <div class="ctrl"><label>Kite volume</label><input id="kiteVol" type="range" min="0" max="1" step="0.001" value="0.85"><div class="val" id="kiteVolV"></div></div>
+    <div class="ctrl"><label>Kite intensity</label><input id="kite" type="range" min="0" max="1" step="0.001" value="0.35"><div class="val" id="kiteV"></div></div>
+    <div class="ctrl"><label>Kite altitude</label><input id="alt" type="range" min="0" max="1" step="0.001" value="0.45"><div class="val" id="altV"></div></div>
+    <div class="ctrl"><label>Vibrato (in turbulence)</label><input id="vib" type="range" min="0" max="1" step="0.001" value="0.35"><div class="val" id="vibV"></div></div>
+  </div>
+</main>
+
+<script>
+(() => {
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const lin = (a, b, t) => a + (b - a) * t;
+  const expMap = (min, max, t) => min * Math.pow(max / min, t); // perceptual-ish
+
+  // UI elements
+  const ui = {
+    master: $("master"), depth: $("depth"), humidity: $("humidity"), temp: $("temp"), co2: $("co2"),
+    reverb: $("reverb"), width: $("width"),
+
+    mossVol: $("mossVol"), breath: $("breath"), heart: $("heart"), delicacy: $("delicacy"),
+
+    airVol: $("airVol"),
+    wind: $("wind"), laminar: $("laminar"), turb: $("turb"), rough: $("rough"),
+
+    spVol: $("spVol"), spRate: $("spRate"), spSize: $("spSize"), spWidth: $("spWidth"),
+
+    kiteVol: $("kiteVol"),
+    kite: $("kite"), alt: $("alt"), vib: $("vib"),
+  };
+
+  const valIds = [
+    "master","depth","humidity","temp","co2","reverb","width",
+    "mossVol","breath","heart","delicacy",
+    "airVol","wind","laminar","turb","rough",
+    "spVol","spRate","spSize","spWidth",
+    "kiteVol","kite","alt","vib"
+  ];
+
+  function updateReadouts() {
+    for (const k of valIds) {
+      const v = Number(ui[k].value);
+      $(k+"V").textContent = v.toFixed(3);
+    }
+  }
+  valIds.forEach(k => ui[k].addEventListener("input", updateReadouts));
+  updateReadouts();
+
+  // ---------- Audio graph ----------
+  let ac = null, running = false;
+  let masterGain, preOut, wetGain, dryGain, convolver, postOut;
+  let widthSplitter, widthMerger, widthGainL, widthGainR;
+
+  // Characters
+  let boundaryOsc, boundaryGain, boundaryLP, boundaryBP;
+  let lamNoise, lamHP, lamLP, lamGain;
+  let turbNoise, turbBP, turbGain, turbFlutterOsc, turbFlutterGain;
+  let co2Osc, co2Gain, co2LP;
+  let kiteOsc, kiteGain, kiteFilter, kitePan;
+
+  // Moss character (improved audibility + safe modulation)
+  let mossNoise, mossToneBP, mossLP, mossOut, mossPan;
+  let mossVCA;                 // audio gain controlled by control signal
+  let mossBreathLFO, mossBreathScale;
+  let mossBreathOffset;        // DC base for mossVCA.gain
+  let mossHeartTimer = null;
+  let lastHeartMs = null;
+
+  // Spore bus
+  let sporeBus, sporeGain;
+
+  // play state
+  let kiteHeld = false;
+
+  function makeNoiseBuffer(ac, seconds=2) {
+    const sr = ac.sampleRate;
+    const len = Math.floor(seconds * sr);
+    const buf = ac.createBuffer(1, len, sr);
+    const ch = buf.getChannelData(0);
+    for (let i=0;i<len;i++) ch[i] = (Math.random()*2 - 1);
+    return buf;
+  }
+
+  function makeImpulseResponse(ac, seconds=2.2, decay=2.5) {
+    const sr = ac.sampleRate;
+    const len = Math.floor(seconds * sr);
+    const ir = ac.createBuffer(2, len, sr);
+    for (let c=0;c<2;c++){
+      const data = ir.getChannelData(c);
+      for (let i=0;i<len;i++){
+        const env = Math.pow(1 - (i / len), decay);
+        data[i] = (Math.random()*2 - 1) * env;
+      }
+    }
+    return ir;
+  }
+
+  function startAudio() {
+    if (running) return;
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+
+    // master + wet/dry
+    masterGain = ac.createGain();
+    masterGain.gain.value = Number(ui.master.value);
+
+    preOut = ac.createGain();
+    dryGain = ac.createGain();
+    wetGain = ac.createGain();
+    dryGain.gain.value = 1 - Number(ui.reverb.value);
+    wetGain.gain.value = Number(ui.reverb.value);
+
+    convolver = ac.createConvolver();
+    convolver.buffer = makeImpulseResponse(ac, 2.3, 2.2);
+
+    postOut = ac.createGain();
+
+    // stereo width
+    widthSplitter = ac.createChannelSplitter(2);
+    widthMerger = ac.createChannelMerger(2);
+    widthGainL = ac.createGain();
+    widthGainR = ac.createGain();
+
+    const width = Number(ui.width.value);
+    widthGainL.gain.value = lin(0.6, 1.3, width);
+    widthGainR.gain.value = lin(0.6, 1.3, width);
+
+    // routing
+    preOut.connect(dryGain).connect(postOut);
+    preOut.connect(convolver).connect(wetGain).connect(postOut);
+    postOut.connect(widthSplitter);
+    widthSplitter.connect(widthGainL, 0);
+    widthSplitter.connect(widthGainR, 1);
+    widthGainL.connect(widthMerger, 0, 0);
+    widthGainR.connect(widthMerger, 0, 1);
+    widthMerger.connect(masterGain).connect(ac.destination);
+
+    // ---------- Boundary Layer ----------
+    boundaryOsc = ac.createOscillator();
+    boundaryOsc.type = "sine";
+    boundaryOsc.frequency.value = 55;
+
+    boundaryGain = ac.createGain();
+    boundaryGain.gain.value = 0.0;
+
+    boundaryLP = ac.createBiquadFilter();
+    boundaryLP.type = "lowpass";
+    boundaryLP.frequency.value = 400;
+
+    boundaryBP = ac.createBiquadFilter();
+    boundaryBP.type = "bandpass";
+    boundaryBP.frequency.value = 180;
+    boundaryBP.Q.value = 0.8;
+
+    boundaryOsc.connect(boundaryBP).connect(boundaryLP).connect(boundaryGain).connect(preOut);
+    boundaryOsc.start();
+
+    // ---------- Laminar wind ----------
+    lamNoise = ac.createBufferSource();
+    lamNoise.buffer = makeNoiseBuffer(ac, 2);
+    lamNoise.loop = true;
+
+    lamHP = ac.createBiquadFilter();
+    lamHP.type = "highpass";
+    lamHP.frequency.value = 40;
+
+    lamLP = ac.createBiquadFilter();
+    lamLP.type = "lowpass";
+    lamLP.frequency.value = 1200;
+
+    lamGain = ac.createGain();
+    lamGain.gain.value = 0.0;
+
+    lamNoise.connect(lamHP).connect(lamLP).connect(lamGain).connect(preOut);
+    lamNoise.start();
+
+    // ---------- Turbulence ----------
+    turbNoise = ac.createBufferSource();
+    turbNoise.buffer = makeNoiseBuffer(ac, 2);
+    turbNoise.loop = true;
+
+    turbBP = ac.createBiquadFilter();
+    turbBP.type = "bandpass";
+    turbBP.frequency.value = 1800;
+    turbBP.Q.value = 0.9;
+
+    turbFlutterOsc = ac.createOscillator();
+    turbFlutterOsc.type = "sine";
+    turbFlutterOsc.frequency.value = 6;
+
+    turbFlutterGain = ac.createGain();
+    turbFlutterGain.gain.value = 0.0;
+
+    turbGain = ac.createGain();
+    turbGain.gain.value = 0.0;
+
+    turbFlutterOsc.connect(turbFlutterGain).connect(turbGain.gain);
+    turbNoise.connect(turbBP).connect(turbGain).connect(preOut);
+    turbFlutterOsc.start();
+    turbNoise.start();
+
+    // ---------- CO2 / decay bed ----------
+    co2Osc = ac.createOscillator();
+    co2Osc.type = "triangle";
+    co2Osc.frequency.value = 18;
+
+    co2LP = ac.createBiquadFilter();
+    co2LP.type = "lowpass";
+    co2LP.frequency.value = 120;
+
+    co2Gain = ac.createGain();
+    co2Gain.gain.value = 0.0;
+
+    co2Osc.connect(co2LP).connect(co2Gain).connect(preOut);
+    co2Osc.start();
+
+    // ---------- Moss (breath + heartbeat) ----------
+    // Tone bed: filtered noise (leafy) + very soft low tone
+    mossNoise = ac.createBufferSource();
+    mossNoise.buffer = makeNoiseBuffer(ac, 2);
+    mossNoise.loop = true;
+
+    mossToneBP = ac.createBiquadFilter();
+    mossToneBP.type = "bandpass";
+    mossToneBP.frequency.value = 220;
+    mossToneBP.Q.value = 0.75;
+
+    mossLP = ac.createBiquadFilter();
+    mossLP.type = "lowpass";
+    mossLP.frequency.value = 900;
+
+    mossPan = ac.createStereoPanner();
+    mossPan.pan.value = 0;
+
+    mossVCA = ac.createGain();
+    mossVCA.gain.value = 0.0;
+
+    mossOut = ac.createGain();
+    mossOut.gain.value = 1.0;
+
+    // Breath control signal: (0..1) sine -> scaled -> added to DC base, all feeding mossVCA.gain
+    mossBreathLFO = ac.createOscillator();
+    mossBreathLFO.type = "sine";
+    mossBreathLFO.frequency.value = 0.2;
+
+    const lfoTo01 = ac.createGain();
+    lfoTo01.gain.value = 0.5; // sine [-1,1] -> [-0.5,0.5]
+
+    const lfoOffset = ac.createConstantSource();
+    lfoOffset.offset.value = 0.5; // -> [0,1]
+
+    mossBreathScale = ac.createGain();
+    mossBreathScale.gain.value = 0.0; // set in applyParams
+
+    mossBreathOffset = ac.createConstantSource();
+    mossBreathOffset.offset.value = 0.0; // set in applyParams
+
+    // Connect control chain
+    mossBreathLFO.connect(lfoTo01);
+    lfoTo01.connect(mossBreathScale);
+    lfoOffset.connect(mossBreathScale);   // adds DC 0.5 before scaling? Actually sums, so becomes (0.5*sin + 0.5)
+    mossBreathScale.connect(mossVCA.gain); // contributes modulation component
+    mossBreathOffset.connect(mossVCA.gain); // contributes base loudness
+
+    // Audio chain
+    mossNoise.connect(mossToneBP).connect(mossLP).connect(mossPan).connect(mossVCA).connect(mossOut).connect(preOut);
+
+    mossNoise.start();
+    mossBreathLFO.start();
+    lfoOffset.start();
+    mossBreathOffset.start();
+
+    scheduleHeart(true);
+
+    // ---------- Kite lead ----------
+    kiteOsc = ac.createOscillator();
+    kiteOsc.type = "triangle";
+    kiteOsc.frequency.value = 220;
+
+    kiteFilter = ac.createBiquadFilter();
+    kiteFilter.type = "lowpass";
+    kiteFilter.frequency.value = 900;
+    kiteFilter.Q.value = 0.7;
+
+    kitePan = ac.createStereoPanner();
+    kitePan.pan.value = 0;
+
+    kiteGain = ac.createGain();
+    kiteGain.gain.value = 0.0;
+
+    kiteOsc.connect(kiteFilter).connect(kitePan).connect(kiteGain).connect(preOut);
+    kiteOsc.start();
+
+    // ---------- Spore bus ----------
+    sporeBus = ac.createGain();
+    sporeGain = ac.createGain();
+    sporeGain.gain.value = 0.0;
+    sporeBus.connect(sporeGain).connect(preOut);
+
+    // schedule spores
+    scheduleSporeLoop();
+
+    // set initial params
+    applyParams(true);
+
+    running = true;
+    $("startBtn").disabled = true;
+    $("stopBtn").disabled = false;
+  }
+
+  function stopAudio() {
+    if (!running) return;
+    try { if (mossHeartTimer) clearInterval(mossHeartTimer); } catch(e){}
+    mossHeartTimer = null;
+    try { ac.close(); } catch(e){}
+    ac = null;
+    running = false;
+    $("startBtn").disabled = false;
+    $("stopBtn").disabled = true;
+  }
+
+  $("startBtn").addEventListener("click", startAudio);
+  $("stopBtn").addEventListener("click", stopAudio);
+
+  // ---------- Parameter mapping ----------
+  function applyParams() {
+    if (!running) return;
+    const now = ac.currentTime;
+    const smooth = (param, value, t=0.06) => {
+      if (!param) return;
+      param.cancelScheduledValues(now);
+      param.setTargetAtTime(value, now, t);
+    };
+
+    const master = Number(ui.master.value);
+    const depth = Number(ui.depth.value);
+    const humidity = Number(ui.humidity.value);
+    const temp = Number(ui.temp.value);
+    const co2 = Number(ui.co2.value);
+
+    const reverb = Number(ui.reverb.value);
+    const width = Number(ui.width.value);
+
+    const mossVol = Number(ui.mossVol.value);
+    const breath = Number(ui.breath.value);
+    const heart = Number(ui.heart.value);
+    const delicacy = Number(ui.delicacy.value);
+
+    const airVol = Number(ui.airVol.value);
+    const wind = Number(ui.wind.value);
+    const laminar = Number(ui.laminar.value);
+    const turb = Number(ui.turb.value);
+    const rough = Number(ui.rough.value);
+
+    const spVol = Number(ui.spVol.value);
+    const spSize = Number(ui.spSize.value);
+
+    const kiteVol = Number(ui.kiteVol.value);
+    const kite = Number(ui.kite.value);
+    const alt = Number(ui.alt.value);
+    const vib = Number(ui.vib.value);
+
+    // master + wet/dry
+    smooth(masterGain.gain, master, 0.03);
+    smooth(wetGain.gain, reverb, 0.05);
+    smooth(dryGain.gain, 1 - reverb, 0.05);
+
+    // width
+    widthGainL.gain.setTargetAtTime(lin(0.6, 1.3, width), now, 0.05);
+    widthGainR.gain.setTargetAtTime(lin(0.6, 1.3, width), now, 0.05);
+
+    // boundary layer
+    const boundaryLevel = 0.05 + depth * 0.18;
+    const boundaryCut = expMap(180, 900, 1 - (0.65*depth + 0.35*humidity));
+    const boundaryRes = expMap(120, 360, temp);
+    smooth(boundaryGain.gain, boundaryLevel, 0.12);
+    smooth(boundaryLP.frequency, boundaryCut, 0.10);
+    smooth(boundaryBP.frequency, boundaryRes, 0.10);
+    smooth(boundaryBP.Q, lin(0.6, 1.3, humidity), 0.10);
+    smooth(boundaryOsc.frequency, expMap(40, 90, temp*0.9), 0.12);
+
+    // airflow
+    const lamLevelBase = wind * 0.18 * (0.35 + 0.65*laminar);
+    smooth(lamGain.gain, lamLevelBase * airVol, 0.10);
+    smooth(lamLP.frequency, expMap(500, 4500, wind * (1 - 0.75*laminar)), 0.10);
+    smooth(lamHP.frequency, expMap(20, 120, wind), 0.10);
+
+    const turbLevel = (turb * 0.22) * airVol;
+    smooth(turbGain.gain, turbLevel, 0.08);
+    smooth(turbBP.frequency, expMap(900, 4200, turb), 0.08);
+    smooth(turbBP.Q, lin(0.6, 2.4, rough), 0.08);
+    turbFlutterOsc.frequency.setTargetAtTime(expMap(2.0, 12.0, rough), now, 0.08);
+    turbFlutterGain.gain.setTargetAtTime(rough * turb * 0.55, now, 0.08);
+
+    // CO2 bed
+    smooth(co2Gain.gain, co2 * 0.12, 0.15);
+    smooth(co2LP.frequency, expMap(70, 180, 1 - co2*0.4), 0.15);
+    smooth(co2Osc.frequency, expMap(10, 28, co2), 0.15);
+
+    // Moss improvements:
+    // Base loudness now is clearly audible but still delicate. Delicacy reduces loudness & brightness.
+    const mossBrightness = 1 - delicacy * 0.75; // 1 bright -> 0 dark
+    mossLP.frequency.setTargetAtTime(expMap(450, 2200, mossBrightness), now, 0.12);
+    mossToneBP.frequency.setTargetAtTime(expMap(150, 420, delicacy), now, 0.12);
+    mossToneBP.Q.setTargetAtTime(lin(0.6, 1.6, delicacy), now, 0.12);
+
+    // Breath rate: 0..1 -> 0.08..0.42 Hz (~5..25 breaths/min)
+    mossBreathLFO.frequency.setTargetAtTime(expMap(0.08, 0.42, breath), now, 0.12);
+
+    // Safe VCA control:
+    // mossVCA.gain = base + (0..1)*modDepth
+    // base is never tiny, so you can hear the moss.
+    const base = (0.010 + 0.090*mossVol) * (0.55 + 0.45*(1 - delicacy*0.6));
+    const modDepth = (0.006 + 0.060*mossVol) * (0.25 + 0.75*breath) * (0.6 + 0.4*(1 - delicacy));
+
+    mossBreathOffset.offset.setTargetAtTime(base, now, 0.12);
+    mossBreathScale.gain.setTargetAtTime(modDepth, now, 0.12);
+
+    // gentle stereo drift with airflow
+    mossPan.pan.setTargetAtTime(Math.sin(now*0.18 + wind*1.3) * 0.25 * (0.3 + 0.7*airVol), now, 0.20);
+
+    // Heart reschedule when heart slider changes
+    scheduleHeart(false);
+
+    // Spores
+    sporeGain.gain.setTargetAtTime((0.10 + spSize * 0.20) * spVol, now, 0.10);
+
+    // Kite
+    const baseHz = expMap(140, 720, alt);
+    const kBright = expMap(600, 5200, alt);
+    const heldGain = kiteHeld ? (kite * 0.28 * kiteVol) : 0.0;
+
+    smooth(kiteOsc.frequency, baseHz, 0.06);
+    smooth(kiteFilter.frequency, kBright, 0.06);
+    smooth(kiteGain.gain, heldGain, 0.04);
+
+    kitePan.pan.setTargetAtTime(Math.sin((now*0.25) + wind*2.0) * (0.15 + 0.55*wind) * (0.4 + 0.6*turb), now, 0.08);
+
+    ensureVibrato();
+    vibLFO.frequency.setTargetAtTime(expMap(3, 9, vib), now, 0.08);
+    vibDepth.gain.setTargetAtTime(vib * turb * 35, now, 0.08);
+  }
+
+  // schedule apply on slider movement
+  valIds.forEach(k => ui[k].addEventListener("input", applyParams));
+
+  // ---------- Vibrato ----------
+  let vibLFO = null, vibDepth = null;
+  function ensureVibrato() {
+    if (!running || vibLFO) return;
+    vibLFO = ac.createOscillator();
+    vibLFO.type = "sine";
+    vibLFO.frequency.value = 5;
+    vibDepth = ac.createGain();
+    vibDepth.gain.value = 0;
+    vibLFO.connect(vibDepth).connect(kiteOsc.detune);
+    vibLFO.start();
+  }
+
+  // ---------- Spores ----------
+  let sporeTimer = null;
+  function scheduleSporeLoop() {
+    if (sporeTimer) clearInterval(sporeTimer);
+    sporeTimer = setInterval(() => {
+      if (!running) return;
+      const rate = Number(ui.spRate.value);
+      const chance = rate * 0.18;
+      if (Math.random() < chance) spawnSpore(false);
+    }, 80);
+  }
+
+  function spawnSpore(isUser) {
+    if (!running) return;
+    const now = ac.currentTime;
+    const wind = Number(ui.wind.value);
+    const turb = Number(ui.turb.value);
+    const size = Number(ui.spSize.value);
+    const width = Number(ui.spWidth.value);
+
+    const burst = ac.createBufferSource();
+    burst.buffer = makeNoiseBuffer(ac, 0.12);
+
+    const bp = ac.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = expMap(900, 5200, 0.25 + 0.75*Math.random());
+    bp.Q.value = lin(2.0, 10.0, 0.4 + 0.6*turb);
+
+    const env = ac.createGain();
+    env.gain.value = 0;
+
+    const pan = ac.createStereoPanner();
+    pan.pan.value = (Math.random()*2 - 1) * (0.10 + 0.90*width);
+
+    const a = 0.002 + (1 - turb) * 0.01;
+    const d = 0.02 + (0.10 * (0.6 + 0.4*wind)) + size * 0.07;
+    const peak = (0.10 + size * 0.28) * (isUser ? 1.25 : 1.0);
+
+    env.gain.setValueAtTime(0.0001, now);
+    env.gain.exponentialRampToValueAtTime(peak, now + a);
+    env.gain.exponentialRampToValueAtTime(0.0001, now + a + d);
+
+    burst.connect(bp).connect(pan).connect(env).connect(sporeBus);
+    burst.start(now);
+    burst.stop(now + a + d + 0.02);
+  }
+
+  window.addEventListener("pointerdown", () => {
+    if (!running) return;
+    spawnSpore(true);
+  });
+
+  // ---------- Moss heartbeat ----------
+  function heartIntervalMs() {
+    const heart = Number(ui.heart.value);
+    const bpm = expMap(28, 92, heart);
+    return 60000 / bpm;
+  }
+
+  function scheduleHeart(force) {
+    if (!running) return;
+    const desired = heartIntervalMs();
+    if (force || !mossHeartTimer) {
+      if (mossHeartTimer) clearInterval(mossHeartTimer);
+      mossHeartTimer = setInterval(() => { if (running) playHeartBeat(); }, desired);
+      lastHeartMs = desired;
+      return;
+    }
+    if (lastHeartMs && Math.abs(desired - lastHeartMs) / lastHeartMs > 0.12) {
+      clearInterval(mossHeartTimer);
+      mossHeartTimer = setInterval(() => { if (running) playHeartBeat(); }, desired);
+      lastHeartMs = desired;
+    }
+  }
+
+  function playHeartBeat() {
+    if (!running) return;
+    const now = ac.currentTime;
+
+    const mossVol = Number(ui.mossVol.value);
+    const delicacy = Number(ui.delicacy.value);
+
+    // Louder + clearer than v2, but still soft.
+    const thump = ac.createOscillator();
+    thump.type = "sine";
+    thump.frequency.value = expMap(52, 92, 1 - delicacy*0.85);
+
+    const thumpLP = ac.createBiquadFilter();
+    thumpLP.type = "lowpass";
+    thumpLP.frequency.value = expMap(140, 520, 1 - delicacy*0.8);
+
+    const g = ac.createGain();
+    g.gain.value = 0.0001;
+
+    // small noise "skin" layer for audibility
+    const n = ac.createBufferSource();
+    n.buffer = makeNoiseBuffer(ac, 0.08);
+    const nLP = ac.createBiquadFilter();
+    nLP.type = "lowpass";
+    nLP.frequency.value = expMap(600, 2200, 1 - delicacy*0.7);
+    const ng = ac.createGain();
+    ng.gain.value = 0.0001;
+
+    const base = (0.008 + 0.030*mossVol) * (0.65 + 0.35*(1 - delicacy*0.6));
+
+    // lub-dub envelope
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(base, now + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+    g.gain.exponentialRampToValueAtTime(base*0.55, now + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.20);
+
+    ng.gain.setValueAtTime(0.0001, now);
+    ng.gain.exponentialRampToValueAtTime(base*0.22, now + 0.004);
+    ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+
+    thump.connect(thumpLP).connect(g).connect(mossOut);
+    n.connect(nLP).connect(ng).connect(mossOut);
+
+    thump.start(now); thump.stop(now + 0.26);
+    n.start(now); n.stop(now + 0.10);
+  }
+
+  // ---------- Kite keys ----------
+  function setKiteHeld(held) { kiteHeld = held; applyParams(); }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.repeat) return;
+    if (e.code === "Space") {
+      if (!running) return;
+      setKiteHeld(true);
+      e.preventDefault();
+    }
+    if (e.key === "x" || e.key === "X") {
+      ui.alt.value = String(clamp(Number(ui.alt.value) + 0.03, 0, 1));
+      updateReadouts(); applyParams();
+    }
+    if (e.key === "z" || e.key === "Z") {
+      ui.alt.value = String(clamp(Number(ui.alt.value) - 0.03, 0, 1));
+      updateReadouts(); applyParams();
+    }
+  });
+
+  window.addEventListener("keyup", (e) => {
+    if (e.code === "Space") { setKiteHeld(false); e.preventDefault(); }
+  });
+
+})();
+</script>
+</body>
+</html>
