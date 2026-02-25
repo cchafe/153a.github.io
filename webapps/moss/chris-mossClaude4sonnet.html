@@ -148,6 +148,12 @@
             </div>
             
             <div class="control-group">
+                <h3>Master Volume</h3>
+                <input type="range" id="volume" min="0" max="1" step="0.05" value="0.3">
+                <div>Silent ← → Loud</div>
+            </div>
+            
+            <div class="control-group">
                 <h3>Boundary Layer Depth</h3>
                 <input type="range" id="boundaryDepth" min="0.1" max="2.0" step="0.1" value="1.0">
                 <div>Shallow ← → Deep Forest</div>
@@ -158,15 +164,15 @@
                 <input type="range" id="moisture" min="0" max="1" step="0.05" value="0.6">
                 <div>Arid ← → Humid</div>
             </div>
-            
+        </div>
+        
+        <div class="controls">
             <div class="control-group">
                 <h3>Wind Turbulence</h3>
                 <input type="range" id="turbulence" min="0" max="1" step="0.05" value="0.3">
                 <div>Still ← → Windy</div>
             </div>
-        </div>
-        
-        <div class="controls">
+            
             <div class="control-group">
                 <h3>Moss Communities</h3>
                 <button id="rockMoss" class="moss-btn">Rock Face Moss</button>
@@ -212,6 +218,7 @@
                 this.boundaryDepth = 1.0;
                 this.moisture = 0.6;
                 this.turbulence = 0.3;
+                this.volume = 0.3;
                 
                 // Visualization
                 this.canvas = document.getElementById('visualizer');
@@ -229,7 +236,7 @@
                 
                 // Master gain
                 this.masterGain = this.audioContext.createGain();
-                this.masterGain.gain.value = 0.3;
+                this.masterGain.gain.value = this.volume;
                 this.masterGain.connect(this.audioContext.destination);
                 
                 // Create reverb
@@ -350,6 +357,12 @@
                 voice.envelope.gain.value = 0;
                 
                 return voice;
+            }
+            
+            updateVolume() {
+                if (this.masterGain) {
+                    this.masterGain.gain.value = this.volume;
+                }
             }
             
             updateEnvironment() {
@@ -496,6 +509,11 @@
                     document.getElementById('playBtn').classList.remove('active');
                 });
                 
+                document.getElementById('volume').addEventListener('input', (e) => {
+                    this.volume = parseFloat(e.target.value);
+                    this.updateVolume();
+                });
+                
                 document.getElementById('boundaryDepth').addEventListener('input', (e) => {
                     this.boundaryDepth = parseFloat(e.target.value);
                     document.getElementById('layerInfo').textContent = `Boundary Layer: ${this.boundaryDepth}x`;
@@ -535,4 +553,3 @@
     </script>
 </body>
 </html>
-
