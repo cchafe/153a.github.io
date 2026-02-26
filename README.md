@@ -1,10 +1,10 @@
 # 153a.github.io
 
-Web-based sound experiments for Stanford's NMP CODE Ensemble. 
+Web-based sound experiments for Stanford's [NMP CODE Ensemble](https://ccrma.stanford.edu/~cc/153a/). 
 
 This repository hosts standalone HTML/Web Audio webapps and publishes them through GitHub Pages. The main entry point is the generated `webapps/` index page. 
 
-Live site: [https://cchafe.github.io/153a.github.io/webapps/](https://cchafe.github.io/153a.github.io/webapps/)
+Live site: [https://cchafe.github.io/153a.github.io/webapps/](https://cchafe.github.io/153a.github.io/webapps/) 
 
 ## Overview
 
@@ -116,7 +116,6 @@ node scripts/generate-indexes-of-webapp-subdirectories.mjs
 - `webapps/**/index.html` files are generated. Avoid manual edits because they will be overwritten.
 - Standalone app HTML files are expected to be hand-authored and can include inline styles/scripts.
 - Some historical filenames include spaces and mixed naming styles; this is supported by the generator.
-- For new files, prefer predictable lowercase names with hyphens where practical.
 
 ## Troubleshooting
 
