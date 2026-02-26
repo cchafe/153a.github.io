@@ -82,7 +82,7 @@ Then open:
 ### Regenerate Indexes Manually
 
 ```bash
-cd /Users/reneez/Desktop/github/153a.github.io
+cd /home/.../153a.github.io
 node scripts/generate-indexes-of-webapp-subdirectories.mjs
 ```
 
