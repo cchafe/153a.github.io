@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life in the Boundary Layer - Sonification</title>
+    <style>
+        body {
+            background-color: #1a2312;
+            color: #d4e09b;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            text-align: center;
+        }
+        .container {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 2rem;
+            border-radius: 15px;
+            border: 1px solid #4a5d23;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            max-width: 400px;
+        }
+        h1 { margin-top: 0; font-weight: 300; letter-spacing: 2px; }
+        p { font-size: 0.9rem; line-height: 1.5; color: #a3b18a; }
+        .controls { margin-top: 20px; }
+        button {
+            background: #4a5d23;
+            color: #d4e09b;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.3s;
+        }
+        button:hover { background: #607d3b; }
+        .volume-slider { width: 100%; margin: 20px 0; }
+        .visualizer {
+            width: 100%;
+            height: 60px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 2px;
+            margin-bottom: 20px;
+        }
+        .bar { width: 8px; background: #84a98c; border-radius: 4px 4px 0 0; transition: height 0.1s; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>BOUNDARY LAYER</h1>
+    <p><i>"A floating greenhouse hovering just above the rock surface."</i></p>
+    
+    <div class="visualizer" id="visualizer">
+        </div>
+
+    <div class="controls">
+        <button id="playBtn">Start Sonification</button>
+        <div style="margin-top:15px;">
+            <label for="volume">Volume</label><br>
+            <input type="range" id="volume" class="volume-slider" min="0" max="1" step="0.01" value="0.5">
+        </div>
+    </div>
+</div>
+
+<script>
+    let audioCtx;
+    let mainGain;
+    let isPlaying = false;
+    let bars = [];
+
+    // Setup visualizer bars
+    const viz = document.getElementById('visualizer');
+    for(let i=0; i<15; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        bar.style.height = '10px';
+        viz.appendChild(bar);
+        bars.push(bar);
+    }
+
+    function createReverb(ctx) {
+        const length = ctx.sampleRate * 3;
+        const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+        for (let i = 0; i < 2; i++) {
+            const channel = impulse.getChannelData(i);
+            for (let j = 0; j < length; j++) {
+                channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / length, 2);
+            }
+        }
+        const convolve = ctx.createConvolver();
+        convolve.buffer = impulse;
+        return convolve;
+    }
+
+    function spawnVocalSynth() {
+        if (!isPlaying) return;
+
+        // FM Synthesis for "Vocal" Moss breathing
+        const carrier = audioCtx.createOscillator();
+        const modulator = audioCtx.createOscillator();
+        const modGain = audioCtx.createGain();
+        const synthGain = audioCtx.createGain();
+        const panner = audioCtx.createStereoPanner();
+
+        // Randomize frequencies based on "smallness"
+        // Base freq: 110Hz (A2) to 440Hz (A4)
+        const baseFreq = 110 + (Math.random() * 330);
+        carrier.type = 'sine';
+        carrier.frequency.value = baseFreq;
+
+        // Modulator creates the "vocal" texture
+        modulator.frequency.value = baseFreq * (Math.random() > 0.5 ? 2 : 0.5);
+        modGain.gain.value = 50 + (Math.random() * 100);
+
+        modulator.connect(modGain);
+        modGain.connect(carrier.frequency);
+
+        // Movement across the boundary layer (Panning)
+        panner.pan.value = (Math.random() * 2 - 1);
+        
+        carrier.connect(synthGain);
+        synthGain.connect(panner);
+        panner.connect(mainGain);
+
+        const now = audioCtx.currentTime;
+        const duration = 4 + Math.random() * 4;
+
+        synthGain.gain.setValueAtTime(0, now);
+        synthGain.gain.linearRampToValueAtTime(0.1, now + duration/2);
+        synthGain.gain.linearRampToValueAtTime(0, now + duration);
+
+        carrier.start(now);
+        modulator.start(now);
+        carrier.stop(now + duration);
+        modulator.stop(now + duration);
+
+        // Visualizer animation link
+        const barIdx = Math.floor(Math.random() * bars.length);
+        bars[barIdx].style.height = '50px';
+        setTimeout(() => bars[barIdx].style.height = '10px', 500);
+
+        // Schedule next breath
+        setTimeout(spawnVocalSynth, 1000 + Math.random() * 2000);
+    }
+
+    document.getElementById('playBtn').addEventListener('click', async () => {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            mainGain = audioCtx.createGain();
+            mainGain.gain.value = document.getElementById('volume').value;
+
+            const reverb = createReverb(audioCtx);
+            const reverbLevel = audioCtx.createGain();
+            reverbLevel.gain.value = 0.4;
+
+            mainGain.connect(audioCtx.destination);
+            mainGain.connect(reverb);
+            reverb.connect(reverbLevel);
+            reverbLevel.connect(audioCtx.destination);
+        }
+
+        if (!isPlaying) {
+            isPlaying = true;
+            document.getElementById('playBtn').innerText = "Stop Sonification";
+            audioCtx.resume();
+            spawnVocalSynth();
+            spawnVocalSynth(); // Layers
+        } else {
+            isPlaying = false;
+            document.getElementById('playBtn').innerText = "Start Sonification";
+            audioCtx.suspend();
+        }
+    });
+
+    document.getElementById('volume').addEventListener('input', (e) => {
+        if (mainGain) mainGain.gain.value = e.target.value;
+    });
+</script>
+</body>
+</html>
