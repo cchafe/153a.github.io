@@ -1,0 +1,908 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Breath Sonification — Logistic Map Synthesis</title>
+  <style>
+    :root{
+      --bg:#070a14;
+      --panel: rgba(255,255,255,.04);
+      --panel2: rgba(0,0,0,.22);
+      --border: rgba(255,255,255,.08);
+      --text:#e9eeff;
+      --muted:#aeb8ea;
+      --accent:#7aa2ff;
+      --accent2:#60e1ff;
+      --good:#43f59a;
+      --warn:#ffd166;
+      --bad:#ff4d6d;
+      --shadow: rgba(0,0,0,.35);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%; margin:0; color:var(--text); font:14px/1.35 var(--sans);
+      background:
+        radial-gradient(1100px 800px at 25% 10%, #1a2a6a 0%, rgba(20,26,55,.35) 26%, rgba(7,10,20,1) 55%),
+        radial-gradient(900px 650px at 85% 25%, rgba(96,225,255,.12) 0%, rgba(0,0,0,0) 55%),
+        linear-gradient(180deg, #070a14, #050711);
+      overflow:hidden;
+    }
+    a{color:var(--accent)}
+    .app{
+      height:100%;
+      display:grid;
+      grid-template-columns: minmax(320px, 470px) 1fr;
+      gap:14px;
+      padding:14px;
+    }
+    @media (max-width: 1040px){
+      html,body{overflow:auto;}
+      .app{grid-template-columns: 1fr; grid-template-rows: auto auto; overflow:visible; height: auto;}
+    }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 16px 60px var(--shadow);
+      overflow:hidden;
+      min-height: 120px;
+    }
+
+    .left{
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+      gap:14px;
+    }
+    .right{
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+      gap:14px;
+    }
+    .right > .card.view {
+      flex: 1;
+      min-height: 0;
+    }
+    .right > .card:not(.view){
+      flex-shrink: 0;
+    }
+
+    .header{
+      padding:14px 14px 10px;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .header h1{
+      margin:0;
+      font-size:14px;
+      letter-spacing:.2px;
+      font-weight:750;
+    }
+    .sub{
+      margin-top:4px;
+      color:var(--muted);
+      font-size:12px;
+      max-width: 60ch;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.25);
+      color:var(--muted);
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .pill b{color:var(--text)}
+    .pill .dot{
+      width:8px;height:8px;border-radius:99px;
+      background: var(--bad);
+      box-shadow: 0 0 0 3px rgba(255,77,109,.12);
+    }
+    .pill.on .dot{
+      background: var(--good);
+      box-shadow: 0 0 0 3px rgba(67,245,154,.12);
+    }
+
+    .body{
+      padding:12px 14px 14px;
+    }
+
+    .grid2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      align-items:start;
+    }
+    @media (max-width: 520px){
+      .grid2{grid-template-columns: 1fr;}
+    }
+
+    .box{
+      background: var(--panel2);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius: 12px;
+      padding:10px;
+      min-height: 60px;
+    }
+    .box h2{
+      margin:0 0 8px;
+      font-size:12px;
+      font-weight:750;
+      color:var(--muted);
+      letter-spacing:.2px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+    }
+    .help{color:rgba(255,255,255,.5); font-size:11px}
+    .row{display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin:10px 0; align-items:center;}
+    .row.one{grid-template-columns: 1fr;}
+    label{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      color:var(--muted);
+      font-size:12px;
+      user-select:none;
+    }
+    .mono{font-family: var(--mono); font-variant-numeric: tabular-nums}
+    input[type="range"]{width:100%}
+    select, input[type="number"], button, input[type="checkbox"]{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 8px 10px;
+      outline:none;
+      vertical-align: middle;
+    }
+    input[type="checkbox"]{width:18px;height:18px;padding:0; margin-right: 6px;}
+    input[type="number"]{width:100%}
+    button{
+      cursor:pointer;
+      font-weight:750;
+    }
+    button:hover{border-color: rgba(122,162,255,.55)}
+    button:active{transform: translateY(1px)}
+    button:disabled{opacity: 0.5; cursor: not-allowed; border-color: rgba(255,255,255,.10); background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color: var(--text);}
+    .btnbar{
+      display:flex; flex-wrap:wrap; gap:10px;
+    }
+    .btnbar button{flex:1; min-width: 120px}
+    button.primary {
+      background: var(--accent);
+      color: var(--bg);
+      border-color: var(--accent);
+    }
+    button.primary:hover:not(:disabled) {
+      background: var(--accent2);
+      border-color: var(--accent2);
+    }
+    button.success {
+      background: var(--good);
+      border-color: var(--good);
+      color: var(--bg);
+    }
+    .divider{height:1px; background:rgba(255,255,255,.08); margin:10px 0}
+
+    /* Canvases and Overlays */
+    .view{
+      display:flex; flex-direction:column; min-height:0;
+    }
+    .canvasWrap{
+      position:relative;
+      padding:0;
+      min-height: 200px;
+      flex:1;
+    }
+    canvas{
+      width:100%;
+      height:100%;
+      display:block;
+      background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.12));
+    }
+    .overlay{
+      position:absolute; left:10px; top:10px; right:10px;
+      display:flex; gap:8px; flex-wrap:wrap;
+      pointer-events:none;
+    }
+    .legend{
+      pointer-events:none;
+      background: rgba(0,0,0,.35);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: 12px;
+      padding: 6px 10px;
+      backdrop-filter: blur(6px);
+      font-size:12px;
+      color: var(--muted);
+    }
+    .legend span{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px;}
+    .legend .a{background:var(--accent);}
+    .legend .b{background:var(--accent2);}
+    .legend .c{background:var(--good);}
+    .legend .d{background:var(--warn);}
+    .legend .e{background:var(--bad);}
+
+    /* Scroll in left panel if needed */
+    .scroll{
+      overflow:auto;
+      max-height: calc(100vh - 28px);
+      min-height:0;
+    }
+    @media (max-width: 1040px){
+      .scroll{max-height:none}
+    }
+
+    .smallNote{
+      margin-top:10px;
+      color: var(--muted);
+      font-size:12px;
+    }
+    .kbd{
+      font-family: var(--mono);
+      font-size:12px;
+      padding:2px 6px;
+      border-radius: 7px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.22);
+      color: var(--text);
+    }
+
+    /* Minimal Mode Styles */
+    .app.minimal #drive-card,
+    .app.minimal #model-card,
+    .app.minimal #traces-card,
+    .app.minimal .hide-in-minimal {
+      display: none;
+    }
+    .app.minimal {
+      grid-template-columns: auto 1fr;
+    }
+    @media (max-width: 1040px){
+      .app.minimal {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- LEFT: controls (scrollable) -->
+    <div class="left scroll">
+      <div class="card" id="main-controls-card">
+        <div class="header hide-in-minimal">
+          <div>
+            <h1>Breath Sonification (WebAudio) — Logistic Map Synthesis</h1>
+            <div class="sub">A single-compartment lung model drives a breath sound synthesizer. “Turbulence” is generated with logistic-map synthesis and shaped by airflow with stereo panning.</div>
+          </div>
+          <div class="pill" id="audioPill" title="Audio state">
+            <span class="dot"></span>
+            <b id="audioState">Audio: Off</b>
+            <span class="mono" id="cpuRead">—</span>
+          </div>
+        </div>
+        <div class="body">
+          <div class="btnbar">
+            <button id="startAudio" class="primary">Start Audio</button>
+            <button id="stopAudio">Stop</button>
+            <button id="savePreset" class="hide-in-minimal">Save New Preset...</button>
+            <button id="deletePreset" disabled class="hide-in-minimal">Delete Current Preset</button>
+          </div>
+          <div class="divider"></div>
+          <div><label style="cursor:pointer; display: flex; align-items: center; justify-content: flex-start;"><input type="checkbox" id="minimalModeToggle" style="margin-right: 8px;"> Minimal Mode</label></div>
+          <div class="hide-in-minimal">
+            <div class="divider"></div>
+             <div class="btnbar">
+              <button id="panic">Panic (Mute)</button>
+              <button id="resetModel">Reset Model</button>
+            </div>
+
+            <div class="smallNote">
+              Tips: Use <span class="kbd">Space</span> to toggle audio. The model computes <span class="mono">Paw = Pel(V) + Ppl</span> and <span class="mono">Patm - Paw = R·Q + I·dQ/dt</span>, with <span class="mono">Ppl = -Pmus</span>, and <span class="mono">Q&gt;0</span> = inspiration.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="drive-card">
+        <div class="header">
+          <div>
+            <h1>Breath Drive (Waveform)</h1>
+            <div class="sub">Drive functions: sinusoid, half-cosine + expiratory relaxation, trapezoid, and double-exponential.</div>
+          </div>
+          <div class="pill"><b id="fps">—</b></div>
+        </div>
+        <div class="body">
+          <div class="row one">
+            <div>
+              <label>Preset</label>
+              <select id="presetSelect">
+                <optgroup label="Built-in Presets">
+                  <option value="normal">Normal Breathing</option>
+                  <option value="deep">Deep & Slow</option>
+                  <option value="anxious">Anxious / Rapid</option>
+                  <option value="obstructed">Obstructed</option>
+                  <option value="exercise">After Exercise</option>
+                </optgroup>
+                <optgroup label="Custom Presets" id="customPresetGroup"></optgroup>
+                <option value="--" disabled>-- Custom (Unsaved) --</option>
+              </select>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="row">
+            <div>
+              <label>Drive model <span class="mono" id="driveModelRead">Sinusoid</span></label>
+              <select id="driveModel">
+                <option value="sin">Sinusoid (baseline)</option>
+                <option value="halfCosExp">Half-cosine insp + exp relaxation</option>
+                <option value="trapezoid">Trapezoid (ramp–hold–release)</option>
+                <option value="doubleExp">Double-exponential (rise/decay)</option>
+                <option value="manual">Manual effort (slider)</option>
+                <option value="relax">No drive (relax)</option>
+              </select>
+            </div>
+            <div>
+              <label>Path <span class="mono" id="pathRead">Nose</span></label>
+              <select id="path">
+                <option value="nose">Nose</option>
+                <option value="mouth">Mouth</option>
+                <option value="both">Both (parallel)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>Breaths/min <span class="mono" id="rrRead">12.0</span></label>
+              <input id="rr" type="range" min="4" max="30" step="0.1" value="12">
+            </div>
+            <div>
+              <label>Drive amplitude <span class="mono" id="driveAmpRead">6.0</span> <span class="mono">cmH₂O</span></label>
+              <input id="driveAmp" type="range" min="0" max="18" step="0.1" value="6">
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>Manual effort (manual mode) <span class="mono" id="manualRead">0.00</span></label>
+              <input id="manual" type="range" min="-1" max="1" step="0.001" value="0">
+            </div>
+            <div>
+              <label>I:E shape (inspiratory fraction) <span class="mono" id="ieRead">0.40</span></label>
+              <input id="ie" type="range" min="0.2" max="0.7" step="0.01" value="0.40">
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>Trapezoid hold (fraction of insp) <span class="mono" id="holdRead">0.20</span></label>
+              <input id="hold" type="range" min="0" max="0.8" step="0.01" value="0.20">
+            </div>
+            <div>
+              <label>Smoothing (edges) <span class="mono" id="smoothRead">0.08</span></label>
+              <input id="smooth" type="range" min="0" max="0.25" step="0.005" value="0.08">
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>Exp relaxation τ (cycles) <span class="mono" id="tauExpRead">0.30</span></label>
+              <input id="tauExp" type="range" min="0.05" max="1.2" step="0.01" value="0.30">
+            </div>
+            <div>
+              <label>Rise τ (cycles) <span class="mono" id="tauRiseRead">0.12</span></label>
+              <input id="tauRise" type="range" min="0.03" max="0.6" step="0.01" value="0.12">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="model-card">
+        <div class="header">
+          <div>
+            <h1>Physical Model</h1>
+            <div class="sub">Compliance + nonlinear stiffening, airway resistance (nose/mouth/both), and optional flow inertia + soft flow limiting.</div>
+          </div>
+          <div class="pill"><b id="stateLabel">Running</b></div>
+        </div>
+        <div class="body">
+          <div class="grid2">
+            <div class="box">
+              <h2>Lung mechanics</h2>
+              <div class="row" style="margin:0 0 8px;">
+                <div>
+                  <label>Compliance C <span class="mono" id="cRead">0.10</span> <span class="mono">L/cmH₂O</span></label>
+                  <input id="comp" type="range" min="0.03" max="0.25" step="0.005" value="0.10">
+                </div>
+                <div>
+                  <label>Rest volume (FRC) <span class="mono" id="v0Read">2.40</span> <span class="mono">L</span></label>
+                  <input id="v0" type="range" min="1.2" max="3.4" step="0.05" value="2.40">
+                </div>
+              </div>
+              <div class="row" style="margin:0;">
+                <div>
+                  <label>Chest coupling <span class="mono" id="kChestRead">0.80</span></label>
+                  <input id="kChest" type="range" min="0.2" max="1.4" step="0.02" value="0.80">
+                </div>
+                <div>
+                  <label>Nonlinear stiffening <span class="mono" id="nonlinRead">0.20</span></label>
+                  <input id="nonlin" type="range" min="0" max="0.8" step="0.01" value="0.20">
+                </div>
+              </div>
+            </div>
+
+            <div class="box">
+              <h2>Airway resistance</h2>
+              <div class="row" style="margin:0 0 8px;">
+                <div>
+                  <label>Nose R <span class="mono" id="rnRead">4.0</span> <span class="mono">cmH₂O·s/L</span></label>
+                  <input id="rn" type="range" min="1.0" max="10.0" step="0.1" value="4.0">
+                </div>
+                <div>
+                  <label>Mouth R <span class="mono" id="rmRead">2.0</span> <span class="mono">cmH₂O·s/L</span></label>
+                  <input id="rm" type="range" min="0.6" max="8.0" step="0.1" value="2.0">
+                </div>
+              </div>
+              <div class="row" style="margin:0;">
+                <div>
+                  <label>Flow inertia I <span class="mono" id="inertiaRead">0.050</span></label>
+                  <input id="inertia" type="range" min="0" max="0.25" step="0.005" value="0.05">
+                </div>
+                <div>
+                  <label>Flow limiter (soft) <span class="mono" id="qmaxRead">2.00</span> <span class="mono">L/s</span></label>
+                  <input id="qmax" type="range" min="0.5" max="4.0" step="0.05" value="2.0">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="btnbar">
+            <button id="toggle">Pause</button>
+            <button id="zero">Zero traces</button>
+            <button id="slow">0.5×</button>
+            <button id="norm">1×</button>
+            <button id="fast">2×</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="sonification-card">
+        <div class="header hide-in-minimal">
+          <div>
+            <h1>Sonification</h1>
+            <div class="sub">Logistic-map synthesis (chaotic) → airflow-shaped “breath noise” → stereo pan.</div>
+          </div>
+          <div class="pill"><b class="mono" id="peakRead">—</b></div>
+        </div>
+        <div class="body">
+          <div class="grid2">
+            <div class="box">
+              <h2>Source & shaping</h2>
+              <div class="row">
+                <div>
+                  <label>Output gain <span class="mono" id="gainRead">0.35</span></label>
+                  <input id="gain" type="range" min="0" max="1" step="0.001" value="0.35">
+                </div>
+                <div class="hide-in-minimal">
+                  <label>Noise mix (chaos) <span class="mono" id="mixRead">0.85</span></label>
+                  <input id="mix" type="range" min="0" max="1" step="0.001" value="0.85">
+                </div>
+              </div>
+
+              <div class="row hide-in-minimal">
+                <div>
+                  <label>Logistic r (chaos) <span class="mono" id="rRead">3.99</span></label>
+                  <input id="r" type="range" min="3.2" max="3.999" step="0.001" value="3.99">
+                </div>
+                <div>
+                  <label>Iterations / sample <span class="mono" id="iterRead">2</span></label>
+                  <input id="iters" type="range" min="1" max="8" step="1" value="2">
+                </div>
+              </div>
+
+              <div class="row hide-in-minimal">
+                <div>
+                  <label>Breath brightness <span class="mono" id="brightRead">0.45</span></label>
+                  <input id="bright" type="range" min="0" max="1" step="0.001" value="0.45">
+                </div>
+                <div>
+                  <label>Flow-to-amplitude <span class="mono" id="flowAmpRead">0.80</span></label>
+                  <input id="flowAmp" type="range" min="0" max="2" step="0.001" value="0.80">
+                </div>
+              </div>
+
+              <div class="row hide-in-minimal">
+                <div>
+                  <label>Inhale/Exhale contrast <span class="mono" id="contrastRead">0.55</span></label>
+                  <input id="contrast" type="range" min="0" max="1" step="0.001" value="0.55">
+                </div>
+                <div>
+                  <label>Soft clip <span class="mono" id="clipRead">0.85</span></label>
+                  <input id="clip" type="range" min="0" max="1" step="0.001" value="0.85">
+                </div>
+              </div>
+            </div>
+
+            <div class="box hide-in-minimal">
+              <h2>Stereo Panning</h2>
+              <div class="row">
+                <div>
+                  <label>Pan depth <span class="mono" id="panRead">0.65</span></label>
+                  <input id="panDepth" type="range" min="0" max="1" step="0.001" value="0.65">
+                </div>
+                <div>
+                  <label>Pan speed <span class="mono" id="panSpRead">0.13</span></label>
+                  <input id="panSpeed" type="range" min="0" max="1" step="0.001" value="0.13">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: visualization -->
+    <div class="right">
+      <div class="card view" id="traces-card">
+        <div class="header">
+          <div>
+            <h1>Real-time Traces</h1>
+          </div>
+        </div>
+        <div class="canvasWrap">
+          <canvas id="cv"></canvas>
+          <div class="overlay">
+            <div class="legend"><span class="a"></span>V (L)</div>
+            <div class="legend"><span class="b"></span>Q (L/s)</div>
+            <div class="legend"><span class="c"></span>Ppl</div>
+            <div class="legend"><span class="d"></span>Paw</div>
+            <div class="legend"><span class="e"></span>Pel</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="trajectory-card">
+        <div class="header">
+          <h1>Preset Space & Trajectory</h1>
+        </div>
+        <div class="body">
+          <div class="canvasWrap" style="min-height: 200px; cursor: crosshair;">
+            <canvas id="trajCv"></canvas>
+          </div>
+          <div class="divider"></div>
+          <div class="row one" style="margin-bottom: 0;">
+            <label><input type="checkbox" id="enableTraj"> Enable Trajectory Mode</label>
+          </div>
+          <div class="row">
+            <div>
+              <label>Path Speed <span class="mono" id="trajSpeedRead">0.10</span></label>
+              <input id="trajSpeed" type="range" min="0.01" max="1.0" step="0.01" value="0.1">
+            </div>
+            <div class="btnbar" style="gap: 5px;">
+              <button id="playTraj">Play</button>
+              <button id="rewindTraj">Rewind</button>
+              <button id="clearTraj">Clear</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ---------- Utilities ----------
+  const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const fmt=(x,n=2)=> (Number.isFinite(x)? x.toFixed(n) : "—");
+  const el=id=>document.getElementById(id);
+
+  // ---------- UI refs ----------
+  const ui = {
+    app: document.querySelector('.app'),
+    minimalModeToggle: el("minimalModeToggle"),
+    cv: el("cv"), trajCv: el("trajCv"), presetSelect: el("presetSelect"), customPresetGroup: el("customPresetGroup"),
+    savePreset: el("savePreset"), deletePreset: el("deletePreset"), enableTraj: el("enableTraj"), trajSpeed: el("trajSpeed"),
+    trajSpeedRead: el("trajSpeedRead"), playTraj: el("playTraj"), rewindTraj: el("rewindTraj"), clearTraj: el("clearTraj"),
+    driveModel: el("driveModel"), path: el("path"), rr: el("rr"), driveAmp: el("driveAmp"), manual: el("manual"),
+    ie: el("ie"), hold: el("hold"), smooth: el("smooth"), tauExp: el("tauExp"), tauRise: el("tauRise"),
+    comp: el("comp"), v0: el("v0"), kChest: el("kChest"), nonlin: el("nonlin"), rn: el("rn"), rm: el("rm"),
+    inertia: el("inertia"), qmax: el("qmax"), toggle: el("toggle"), zero: el("zero"), slow: el("slow"),
+    norm: el("norm"), fast: el("fast"), resetModel: el("resetModel"), startAudio: el("startAudio"),
+    stopAudio: el("stopAudio"), panic: el("panic"), gain: el("gain"), mix: el("mix"), r: el("r"),
+    iters: el("iters"), bright: el("bright"), flowAmp: el("flowAmp"), contrast: el("contrast"),
+    clip: el("clip"), panDepth: el("panDepth"), panSpeed: el("panSpeed"),
+    reads: {
+      driveModelRead: el("driveModelRead"), pathRead: el("pathRead"), rrRead: el("rrRead"), driveAmpRead: el("driveAmpRead"),
+      manualRead: el("manualRead"), ieRead: el("ieRead"), holdRead: el("holdRead"), smoothRead: el("smoothRead"),
+      tauExpRead: el("tauExpRead"), tauRiseRead: el("tauRiseRead"), cRead: el("cRead"), v0Read: el("v0Read"),
+      kChestRead: el("kChestRead"), nonlinRead: el("nonlinRead"), rnRead: el("rnRead"), rmRead: el("rmRead"),
+      inertiaRead: el("inertiaRead"), qmaxRead: el("qmaxRead"), gainRead: el("gainRead"), mixRead: el("mixRead"),
+      rRead: el("rRead"), iterRead: el("iterRead"), brightRead: el("brightRead"), flowAmpRead: el("flowAmpRead"),
+      contrastRead: el("contrastRead"), clipRead: el("clipRead"), panRead: el("panRead"), panSpRead: el("panSpRead"),
+      fps: el("fps"), stateLabel: el("stateLabel"), audioPill: el("audioPill"), audioState: el("audioState"),
+      cpuRead: el("cpuRead"), peakRead: el("peakRead"),
+    }
+  };
+
+  // ---------- Parameter packing ----------
+  function params(){
+    return {
+      driveModel: ui.driveModel.value, path: ui.path.value, rr: parseFloat(ui.rr.value), driveAmp: parseFloat(ui.driveAmp.value), manual: parseFloat(ui.manual.value), ie: parseFloat(ui.ie.value), hold: parseFloat(ui.hold.value), smooth: parseFloat(ui.smooth.value), tauExp: parseFloat(ui.tauExp.value), tauRise: parseFloat(ui.tauRise.value), comp: parseFloat(ui.comp.value), v0: parseFloat(ui.v0.value), kChest: parseFloat(ui.kChest.value), nonlin: parseFloat(ui.nonlin.value), rn: parseFloat(ui.rn.value), rm: parseFloat(ui.rm.value), inertia: parseFloat(ui.inertia.value), qmax: parseFloat(ui.qmax.value),
+      audio: { gain: parseFloat(ui.gain.value), mix: parseFloat(ui.mix.value), r: parseFloat(ui.r.value), iters: parseInt(ui.iters.value, 10), bright: parseFloat(ui.bright.value), flowAmp: parseFloat(ui.flowAmp.value), contrast: parseFloat(ui.contrast.value), clip: parseFloat(ui.clip.value), panDepth: parseFloat(ui.panDepth.value), panSpeed: parseFloat(ui.panSpeed.value) }
+    };
+  }
+
+  function syncReads(){
+    const p=params();
+    ui.reads.driveModelRead.textContent = ui.driveModel.options[ui.driveModel.selectedIndex].textContent; ui.reads.pathRead.textContent = ui.path.options[ui.path.selectedIndex].textContent;
+    ui.reads.rrRead.textContent = fmt(p.rr,1); ui.reads.driveAmpRead.textContent = fmt(p.driveAmp,1); ui.reads.manualRead.textContent = fmt(p.manual,2); ui.reads.ieRead.textContent = fmt(p.ie,2);
+    ui.reads.holdRead.textContent = fmt(p.hold,2); ui.reads.smoothRead.textContent = fmt(p.smooth,2); ui.reads.tauExpRead.textContent = fmt(p.tauExp,2); ui.reads.tauRiseRead.textContent = fmt(p.tauRise,2);
+    ui.reads.cRead.textContent = fmt(p.comp,2); ui.reads.v0Read.textContent = fmt(p.v0,2);
+    ui.reads.kChestRead.textContent = fmt(p.kChest,2); ui.reads.nonlinRead.textContent = fmt(p.nonlin,2);
+    ui.reads.rnRead.textContent = fmt(p.rn,1); ui.reads.rmRead.textContent = fmt(p.rm,1);
+    ui.reads.inertiaRead.textContent = fmt(p.inertia,3); ui.reads.qmaxRead.textContent = fmt(p.qmax,2);
+    ui.reads.gainRead.textContent = fmt(p.audio.gain,2); ui.reads.mixRead.textContent = fmt(p.audio.mix,2);
+    ui.reads.rRead.textContent = fmt(p.audio.r,3); ui.reads.iterRead.textContent = String(p.audio.iters);
+    ui.reads.brightRead.textContent = fmt(p.audio.bright,2); ui.reads.flowAmpRead.textContent = fmt(p.audio.flowAmp,2);
+    ui.reads.contrastRead.textContent = fmt(p.audio.contrast,2); ui.reads.clipRead.textContent = fmt(p.audio.clip,2);
+    ui.reads.panRead.textContent = fmt(p.audio.panDepth,2); ui.reads.panSpRead.textContent = fmt(p.audio.panSpeed,2);
+    const m=p.driveModel; ui.manual.disabled = (m!=="manual"); ui.driveAmp.disabled = (m==="relax"); ui.hold.disabled = (m!=="trapezoid"); ui.smooth.disabled = (m!=="trapezoid"); ui.tauRise.disabled = (m!=="doubleExp"); ui.tauExp.disabled = !(m==="halfCosExp" || m==="doubleExp");
+    ui.trajSpeedRead.textContent = fmt(ui.trajSpeed.value, 2);
+  }
+
+  // ---------- Model (single-compartment) ----------
+  const model = { t: 0, V: 2.4, Q: 0, cyclePhase: 0, lastPhase: 0, breathCount: 0, inspTimeAcc: 0, expTimeAcc: 0, stats: { VT:0, Vmin:1e9, Vmax:-1e9, peakInspFlow:0, peakExpFlow:0 } };
+  function effectiveResistance(path, Rn, Rm){ if(path==="nose") return Rn; if(path==="mouth") return Rm; return 1/(1/Math.max(1e-6,Rn) + 1/Math.max(1e-6,Rm)); }
+  function pElastic(V, V0, C, nonlin){ const x = (V - V0); const Vscale = 2.0; const linear = x / Math.max(1e-6, C); const cubic = nonlin * (x*x*x) / (Math.max(1e-6, C) * (Vscale*Vscale)); return linear + cubic; }
+
+  // ---------- Drive waveforms (0..1) ----------
+  function driveSin(phase){ return 0.5 - 0.5*Math.cos(2*Math.PI*phase); }
+  function driveHalfCosExp(phase, inspFrac, tauExpCycles){ const f = clamp(inspFrac, 0.2, 0.8); if(phase < f){ const u = phase/f; return 0.5 - 0.5*Math.cos(Math.PI*u); } else { const u = (phase - f)/Math.max(1e-9, (1-f)); const tau = Math.max(1e-4, tauExpCycles); return Math.exp(-u/tau); } }
+  function driveTrapezoid(phase, inspFrac, holdFracInsp, smooth){ const f = clamp(inspFrac, 0.2, 0.8); if(phase >= f) return 0; const u = phase / f; const hold = clamp(holdFracInsp, 0, 0.95); const ramp = (1-hold) * 0.5; const upEnd = ramp; const downStart = ramp + hold; let y; if(u < upEnd) y = u/Math.max(1e-9, upEnd); else if(u < downStart) y = 1; else y = 1 - (u - downStart)/Math.max(1e-9, (1-downStart)); const s = clamp(smooth, 0, 0.25); const gate = (t,a,b,s) => { if(b<=a) return 0; const ss = clamp(s,0,0.49); const u0=(t-a)/Math.max(1e-9,ss); const u1=(b-t)/Math.max(1e-9,ss); const sstep=(t)=> t<=0?0 : t>=1?1 : (t*t*(3-2*t)); return sstep(clamp(u0,0,1))*sstep(clamp(u1,0,1)); }; return clamp(y * gate(u, 0, 1, Math.max(1e-6, s)), 0, 1); }
+  function driveDoubleExp(phase, inspFrac, tauRiseCycles, tauExpCycles){ const f = clamp(inspFrac, 0.2, 0.8); const tr = Math.max(1e-4, tauRiseCycles); const te = Math.max(1e-4, tauExpCycles); if(phase < f){ const u = phase/f; const a = 1 - Math.exp(-u/tr); const aEnd = 1 - Math.exp(-1/tr); return a / Math.max(1e-9, aEnd); } else { const u = (phase - f)/Math.max(1e-9, (1-f)); return Math.exp(-u/te); } }
+  function driveNormalized(p, phase){ const m = p.driveModel; if(m==="relax") return 0; if(m==="manual") return clamp((p.manual+1)/2, 0, 1); if(m==="sin") return driveSin(phase); if(m==="halfCosExp") return driveHalfCosExp(phase, p.ie, p.tauExp); if(m==="trapezoid") return driveTrapezoid(phase, p.ie, p.hold, p.smooth); if(m==="doubleExp") return driveDoubleExp(phase, p.ie, p.tauRise, p.tauExp); return driveSin(phase); }
+
+  function snapshot(){ const p=params(); const Pel = pElastic(model.V, p.v0, p.comp, p.nonlin); const u = driveNormalized(p, model.cyclePhase); const Pmus = p.driveAmp * u; const Ppl = -Pmus; const Paw = Pel + Ppl; return { t:model.t, V:model.V, Q:model.Q, Pel, Ppl, Paw, u, Pmus }; }
+
+  function step(dt){
+    const p = ui.enableTraj.checked ? interpolatedParams : params();
+    const R = effectiveResistance(p.path, p.rn, p.rm); const freq = p.rr/60; model.lastPhase = model.cyclePhase; model.cyclePhase = (model.cyclePhase + dt*freq) % 1;
+    const Pel = pElastic(model.V, p.v0, p.comp, p.nonlin); const u = driveNormalized(p, model.cyclePhase); const Pmus = p.driveAmp * u; const Ppl = -Pmus; const Paw = Pel + Ppl;
+    let Q = model.Q; if(p.inertia > 1e-6){ const dQdt = (-Paw - R*Q) / p.inertia; Q = Q + dQdt*dt; } else { Q = (-Paw) / Math.max(1e-6, R); }
+    const softClip = (x,maxAbs)=> { const m=Math.max(1e-6,maxAbs); return m*Math.tanh(x/m); };
+    Q = softClip(Q, Math.max(0.2, p.qmax)); let V = model.V + Q*dt; V = clamp(V, 0.6, 7.0); model.V = V; model.Q = Q; model.t += dt;
+    model.stats.Vmin = Math.min(model.stats.Vmin, V); model.stats.Vmax = Math.max(model.stats.Vmax, V); model.stats.peakInspFlow = Math.max(model.stats.peakInspFlow, Q); model.stats.peakExpFlow = Math.min(model.stats.peakExpFlow, Q);
+    if(model.lastPhase > model.cyclePhase){ model.breathCount++; model.stats.VT = model.stats.Vmax - model.stats.Vmin; model.stats.Vmin = V; model.stats.Vmax = V; model.stats.peakInspFlow = Q; model.stats.peakExpFlow = Q; model.inspTimeAcc = 0; model.expTimeAcc = 0; }
+    if(model.cyclePhase < p.ie) model.inspTimeAcc += dt; else model.expTimeAcc += dt;
+    trace.push({t:model.t, V, Q, Ppl, Paw, Pel, u});
+  }
+
+  // ---------- Traces ----------
+  const trace = { N: 900, idx: 0, V: new Float32Array(900), Q: new Float32Array(900), Ppl: new Float32Array(900), Paw: new Float32Array(900), Pel: new Float32Array(900), u: new Float32Array(900), t: new Float32Array(900), clear(){ this.idx=0; this.V.fill(NaN); this.Q.fill(NaN); this.Ppl.fill(NaN); this.Paw.fill(NaN); this.Pel.fill(NaN); this.u.fill(NaN); this.t.fill(NaN); },
+    push(s){ const i = this.idx % this.N; this.V[i]=s.V; this.Q[i]=s.Q; this.Ppl[i]=s.Ppl; this.Paw[i]=s.Paw; this.Pel[i]=s.Pel; this.u[i]=s.u; this.t[i]=s.t; this.idx++; } };
+  trace.clear();
+
+  // ---------- Visualization ----------
+  const ctx = ui.cv.getContext("2d", {alpha:false}); const trajCtx = ui.trajCv.getContext("2d", {alpha:false});
+  function resize(){ for(const cv of [ui.cv, ui.trajCv]){ const dpr = Math.max(1, Math.min(2.5, devicePixelRatio || 1)); const r = cv.getBoundingClientRect(); cv.width = Math.floor(r.width*dpr); cv.height = Math.floor(r.height*dpr); cv.getContext("2d").setTransform(dpr,0,0,dpr,0,0); } }
+  window.addEventListener("resize", resize);
+  function drawGrid(d_ctx,x,y,w,h, xTicks, yTicks){ d_ctx.save(); d_ctx.strokeStyle="rgba(255,255,255,.06)"; d_ctx.lineWidth=1; for(let i=0;i<=xTicks;i++){ const xx=x+(w*i/xTicks); d_ctx.beginPath(); d_ctx.moveTo(xx,y); d_ctx.lineTo(xx,y+h); d_ctx.stroke(); } for(let j=0;j<=yTicks;j++){ const yy=y+(h*j/yTicks); d_ctx.beginPath(); d_ctx.moveTo(x,yy); d_ctx.lineTo(x+w,yy); d_ctx.stroke(); } d_ctx.restore(); }
+  function drawTrace(d_ctx,x,y,w,h, arr, color, yMin, yMax){ d_ctx.save(); d_ctx.strokeStyle=color; d_ctx.lineWidth=2; d_ctx.beginPath(); const N=trace.N; const start=Math.max(0, trace.idx - N); let started=false; for(let k=0;k<N;k++){ const i=(start+k)%N; const v=arr[i]; const tt=trace.t[i]; if(!Number.isFinite(v)||!Number.isFinite(tt)){ started=false; continue; } const xx=x+(k/(N-1))*w; const yy=y+h*(1-(v-yMin)/(yMax-yMin)); if(!started){ d_ctx.moveTo(xx,yy); started=true; } else d_ctx.lineTo(xx,yy); } d_ctx.stroke(); d_ctx.restore(); }
+  function draw(){
+    const W = ui.cv.getBoundingClientRect().width; const H = ui.cv.getBoundingClientRect().height; if (W === 0 || H === 0) return;
+    ctx.clearRect(0,0,W,H);
+    const pad=14; const cx=pad, cy=pad, cw=W-2*pad, ch=H-2*pad; const rows=3; const rh=ch/rows; const p=params(); const v0 = ui.enableTraj.checked ? interpolatedParams.v0 : p.v0;
+    const Vmin=v0-1.2, Vmax=v0+1.8, Qmin=-2.5, Qmax=2.5, Pmin=-18, Pmax=18;
+    const y1 = cy; drawGrid(ctx, cx, y1, cw, rh, 10, 2); drawTrace(ctx, cx, y1, cw, rh, trace.V, "rgba(122,162,255,.95)", Vmin, Vmax);
+    const y2 = cy + rh; drawGrid(ctx, cx, y2, cw, rh, 10, 2); drawTrace(ctx, cx, y2, cw, rh, trace.Q, "rgba(96,225,255,.95)", Qmin, Qmax);
+    ctx.save(); ctx.strokeStyle="rgba(255,255,255,.14)"; const yz = y2 + rh * (1 - (0 - Qmin) / (Qmax - Qmin)); ctx.beginPath(); ctx.moveTo(cx,yz); ctx.lineTo(cx+cw,yz); ctx.stroke(); ctx.restore();
+    const y3 = cy + 2*rh; drawGrid(ctx, cx, y3, cw, rh, 10, 2); drawTrace(ctx, cx, y3, cw, rh, trace.Ppl, "rgba(67,245,154,.90)", Pmin, Pmax); drawTrace(ctx, cx, y3, cw, rh, trace.Paw, "rgba(255,209,102,.90)", Pmin, Pmax); drawTrace(ctx, cx, y3, cw, rh, trace.Pel, "rgba(255,77,109,.85)", Pmin, Pmax);
+  }
+  function drawTrajectoryView(){
+    const W = ui.trajCv.getBoundingClientRect().width; const H = ui.trajCv.getBoundingClientRect().height; trajCtx.clearRect(0,0,W,H); const pad = 20;
+    const toScreen = (p) => ({ x: pad + p.x * (W - 2*pad), y: pad + (1-p.y) * (H - 2*pad) });
+    const allPresets = { ...builtinPresets, ...getStoredPresets() }; const presetList = Object.entries(allPresets).map(([name, val]) => ({ name, ...val }));
+    let totalWeight = 0; const weights = ui.enableTraj.checked ? presetList.map(p => { const dx = p.coords.x - trajectory.currentPos.x; const dy = p.coords.y - trajectory.currentPos.y; const weight = 1 / (dx*dx + dy*dy + 0.0001); totalWeight += weight; return weight; }) : [];
+    presetList.forEach((p, i) => { const sp = toScreen(p.coords); let r = 5; let alpha = 0.6; if(ui.enableTraj.checked){ const w = weights[i] / totalWeight; r = 3 + 12 * w; alpha = 0.4 + 0.6 * w; } trajCtx.fillStyle = `rgba(122, 162, 255, ${alpha})`; trajCtx.beginPath(); trajCtx.arc(sp.x, sp.y, r, 0, Math.PI*2); trajCtx.fill(); trajCtx.fillStyle = `rgba(233, 238, 255, ${0.4+0.5*alpha})`; trajCtx.font = "11px var(--sans)"; trajCtx.textAlign = 'center'; trajCtx.fillText(p.name, sp.x, sp.y - r - 4); });
+    if(trajectory.path.length > 1){ trajCtx.strokeStyle = "rgba(255,209,102,0.5)"; trajCtx.lineWidth = 2; trajCtx.beginPath(); let sp = toScreen(trajectory.path[0]); trajCtx.moveTo(sp.x, sp.y); for(let i=1; i<trajectory.path.length; i++){ sp = toScreen(trajectory.path[i]); trajCtx.lineTo(sp.x, sp.y); } trajCtx.stroke(); }
+    if(ui.enableTraj.checked && trajectory.path.length > 0){ const headPos = toScreen(trajectory.currentPos); trajCtx.fillStyle = "var(--good)"; trajCtx.strokeStyle = "rgba(255,255,255,0.8)"; trajCtx.lineWidth = 2; trajCtx.beginPath(); trajCtx.arc(headPos.x, headPos.y, 6, 0, Math.PI*2); trajCtx.fill(); trajCtx.stroke(); }
+    if(isPlacingPreset){ trajCtx.fillStyle = "rgba(0,0,0,0.5)"; trajCtx.fillRect(0,0,W,H); trajCtx.fillStyle = "var(--text)"; trajCtx.font = "bold 14px var(--sans)"; trajCtx.textAlign = 'center'; trajCtx.fillText(`Click to place preset: "${isPlacingPreset.name}"`, W/2, H/2); }
+  }
+  
+  // ---------- Audio ----------
+  let audio = { ctx: null, node: null, gain: null, analyser: null, peak: 0, peakT: 0, running: false, lastSend: 0 };
+  
+  function workletSourceCode(){
+    return `
+class BreathLogisticProcessor extends AudioWorkletProcessor {
+  static get parameterDescriptors(){ return [ { name:'gain', defaultValue:0.35, minValue:0, maxValue:1 }, { name:'mix', defaultValue:0.85, minValue:0, maxValue:1 }, { name:'r', defaultValue:3.99, minValue:3.2, maxValue:3.999 }, { name:'iters', defaultValue:2, minValue:1, maxValue:8 }, { name:'bright', defaultValue:0.45, minValue:0, maxValue:1 }, { name:'flowAmp', defaultValue:0.80, minValue:0, maxValue:2 }, { name:'contrast', defaultValue:0.55, minValue:0, maxValue:1 }, { name:'clip', defaultValue:0.85, minValue:0, maxValue:1 }, { name:'panDepth', defaultValue:0.65, minValue:0, maxValue:1 }, { name:'panSpeed', defaultValue:0.13, minValue:0, maxValue:1 }, ]; }
+  constructor(){ super(); this.x = 0.12345; this.x2 = 0.731; this.q = 0; this.u = 0; this.pathType = 0; this.rEff = 3.0; this.t = 0; this.peak = 0; this._meterCounter = 0; this.lpL = 0; this.lpR = 0; this.hp = 0; this.port.onmessage = (e)=>{ const d=e.data||{}; if(typeof d.q === 'number') this.q = d.q; if(typeof d.u === 'number') this.u = d.u; if(typeof d.pathType === 'number') this.pathType = d.pathType|0; if(typeof d.rEff === 'number') this.rEff = d.rEff; }; }
+  _softclip(x, k){ const a = 0.5 + 6.0 * k; return Math.tanh(a*x) / Math.tanh(a); }
+  process(inputs, outputs, parameters){
+    const out = outputs[0]; const L = out[0]; const R = out[1]; const n = L.length;
+    const gainA = parameters.gain, mixA = parameters.mix, rA = parameters.r, itA = parameters.iters, brightA = parameters.bright, flowAmpA = parameters.flowAmp, contrastA = parameters.contrast, clipA = parameters.clip, panDepthA = parameters.panDepth, panSpeedA = parameters.panSpeed;
+    for(let i=0;i<n;i++){
+      const g = gainA.length>1 ? gainA[i] : gainA[0]; const mix = mixA.length>1 ? mixA[i] : mixA[0]; const baseR = rA.length>1 ? rA[i] : rA[0]; const iters = (itA.length>1 ? itA[i] : itA[0])|0; const bright = brightA.length>1 ? brightA[i] : brightA[0]; const flowAmp = flowAmpA.length>1 ? flowAmpA[i] : flowAmpA[0]; const contrast = contrastA.length>1 ? contrastA[i] : contrastA[0]; const clip = clipA.length>1 ? clipA[i] : clipA[0]; const panDepth = panDepthA.length>1 ? panDepthA[i] : panDepthA[0]; const panSpeed = panSpeedA.length>1 ? panSpeedA[i] : panSpeedA[0];
+      const q = this.q; const inhale = q >= 0;
+      const rMod = inhale ? 0 : -(0.08 * contrast); const rr = baseR + rMod; const rr2 = rr - 0.001;
+      const brightMod = inhale ? (0.3 * contrast) : -(0.4 * contrast); const finalBright = Math.max(0.01, Math.min(1.0, bright + brightMod));
+      const expBoost = inhale ? (1.0 - 0.4 * contrast) : (1.0 + 0.6 * contrast);
+      let x = this.x; let x2 = this.x2; for(let k=0;k<iters;k++){ x  = rr*x*(1-x); x2 = rr2*x2*(1-x2); } this.x = x; this.x2 = x2;
+      const chaos = (x*2-1); const chaos2 = (x2*2-1); const qAbs = Math.min(3.0, Math.abs(q)); const pathMouth = (this.pathType === 1) ? 1 : (this.pathType === 2 ? 0.7 : 0.35); const env = Math.pow(qAbs, 0.85) * flowAmp * expBoost * (0.70 + 0.60*pathMouth); const effort = 0.55 + 0.75*this.u;
+      const lpCut = 0.02 + 0.28 * finalBright; const hpCut = 0.001 + 0.05 * (0.35 + 0.65 * finalBright);
+      this.lpL += lpCut*(chaos - this.lpL); this.lpR += lpCut*(chaos2 - this.lpR); this.hp += hpCut*((chaos+chaos2)*0.5 - this.hp); const hpOut = ((chaos+chaos2)*0.5) - this.hp;
+      const breathBaseL = 0.82*this.lpL + 0.18*hpOut; const breathBaseR = 0.82*this.lpR + 0.18*hpOut;
+      const sL = mix*breathBaseL + (1-mix)*Math.sin(6.283*(this.t*0.15) + chaos*0.6)*0.25; const sR = mix*breathBaseR + (1-mix)*Math.sin(6.283*(this.t*0.15) + chaos2*0.6)*0.25;
+      const lfo = Math.sin(6.283*(this.t*panSpeed*0.15)); const pan = panDepth*(0.55*Math.tanh(q*0.9) + 0.45*lfo); const aL = Math.cos((pan+1)*0.25*Math.PI); const aR = Math.sin((pan+1)*0.25*Math.PI);
+      let yL = this._softclip(sL * env * effort * g * aL, clip); let yR = this._softclip(sR * env * effort * g * aR, clip);
+      L[i]=yL; R[i]=yR;
+      const peakNow = Math.max(Math.abs(yL), Math.abs(yR)); if(peakNow > this.peak) this.peak = peakNow;
+      this.t += 1/sampleRate; if(++this._meterCounter >= 1024){ this.port.postMessage({ peak: this.peak }); this.peak = 0; this._meterCounter = 0; }
+    }
+    return true;
+  }}
+registerProcessor('breath-logistic', BreathLogisticProcessor);`;
+  }
+
+  async function ensureAudio(){
+    if(audio.ctx) return audio.ctx;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint:"interactive" });
+    const blob = new Blob([workletSourceCode()], {type:"application/javascript"});
+    const url = URL.createObjectURL(blob);
+    await ctx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+    const node = new AudioWorkletNode(ctx, "breath-logistic", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+    const master = ctx.createGain(); master.gain.value = 1.0;
+    const analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
+    node.connect(master).connect(analyser).connect(ctx.destination);
+    node.port.onmessage = (e)=>{
+      if(e.data && typeof e.data.peak === "number"){ audio.peak = e.data.peak; audio.peakT = performance.now(); }
+    };
+    Object.assign(audio, {ctx, node, gain:master, analyser});
+    return ctx;
+  }
+  
+  function sendAudioParams(){
+    if(!audio.ctx || !audio.node) return;
+    const p = ui.enableTraj.checked ? interpolatedParams : params();
+    const a = p.audio; const t = audio.ctx.currentTime;
+    for (const param of ['gain', 'mix', 'r', 'iters', 'bright', 'flowAmp', 'contrast', 'clip', 'panDepth', 'panSpeed']) {
+      if (audio.node.parameters.has(param)) { audio.node.parameters.get(param).setTargetAtTime(a[param], t, 0.02); }
+    }
+  }
+
+  function sendModelToAudio(){
+    if(!audio.ctx || !audio.node) return;
+    const p = ui.enableTraj.checked ? interpolatedParams : params();
+    const s=snapshot(); const R=effectiveResistance(p.path, p.rn, p.rm);
+    const pathType = (p.path==="nose")?0:(p.path==="mouth")?1:2;
+    audio.node.port.postMessage({ q: s.Q, u: s.u, rEff: R, pathType });
+  }
+
+  function updateAudioUI(){ const on = audio.running && audio.ctx && audio.ctx.state === "running"; ui.reads.audioState.textContent = on ? "Audio: On" : "Audio: Off"; ui.reads.audioPill.classList.toggle("on", !!on); }
+  async function startAudio(){ const ctx = await ensureAudio(); await ctx.resume(); audio.running = true; updateAudioUI(); sendAudioParams(); }
+  async function stopAudio(){ if(!audio.ctx) return; audio.running = false; updateAudioUI(); await audio.ctx.suspend(); }
+  function panic(){ if(audio.ctx && audio.node){ audio.node.parameters.get("gain").setTargetAtTime(0, audio.ctx.currentTime, 0.005); } }
+
+  // ---------- Simulation loop ----------
+  let running=true, timeScale=1, last=performance.now(), fpsAcc=0, fpsN=0, fpsLast=performance.now();
+  function resetModel(){ const p = ui.enableTraj.checked ? interpolatedParams : params(); model.t=0; model.V=p.v0; model.Q=0; model.cyclePhase=0; model.lastPhase=0; model.breathCount=0; model.inspTimeAcc=0; model.expTimeAcc=0; model.stats = { VT:0, Vmin:p.v0, Vmax:p.v0, peakInspFlow:0, peakExpFlow:0 }; trace.clear(); }
+  
+  // ---------- Presets & Trajectory ----------
+  const PRESET_STORAGE_KEY = 'breathSonification_namedPresets_v4';
+  const builtinPresets = {
+    normal: { coords: {x:0.2, y:0.6}, data: { driveModel:"sin", path:"nose", rr:12, driveAmp:6, ie:0.4, comp:0.1, v0:2.4, rn:4, rm:2, audio: { gain:0.45, contrast:0.55, bright:0.45 } } },
+    deep: { coords: {x:0.1, y:0.2}, data: { driveModel:"sin", path:"nose", rr:6, driveAmp:11, ie:0.5, comp:0.15, v0:2.4, rn:3, rm:1.5, audio: { gain:0.5, contrast:0.4, bright:0.35 } } },
+    anxious: { coords: {x:0.9, y:0.8}, data: { driveModel:"halfCosExp", path:"mouth", rr:24, driveAmp:4.5, ie:0.35, comp:0.08, v0:2.2, rn:5, rm:2.5, audio: { gain:0.35, contrast:0.75, bright:0.65 } } },
+    obstructed: { coords: {x:0.5, y:0.9}, data: { driveModel:"sin", path:"nose", rr:14, driveAmp:12, ie:0.4, comp:0.07, v0:2.6, rn:10, rm:8, audio: { gain:0.55, contrast:0.8, bright:0.8 } } },
+    exercise: { coords: {x:0.8, y:0.3}, data: { driveModel:"halfCosExp", path:"both", rr:28, driveAmp:15, ie:0.45, comp:0.12, v0:2.4, rn:5, rm:1, audio: { gain:0.5, contrast:0.6, bright:0.7 } } },
+  };
+  const fullDefaultParams = params();
+  function mergeWithDefaults(partialData, defaults) { const full = JSON.parse(JSON.stringify(defaults)); Object.keys(partialData).forEach(key => { if (key === 'audio' && typeof partialData[key] === 'object') { Object.assign(full.audio, partialData.audio); } else { full[key] = partialData[key]; } }); return full; }
+  let interpolatedParams = params();
+  const trajectory = { path: [], headT: 0, isPlaying: false, speed: 0.1, currentPos: {x:0,y:0} };
+  let isPlacingPreset = null;
+
+  function getStoredPresets() { try { const s = localStorage.getItem(PRESET_STORAGE_KEY); return s ? JSON.parse(s) : {}; } catch (e) { return {}; } }
+  function saveStoredPresets(p) { try { localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(p)); } catch (e) { alert("Error saving presets."); } }
+
+  function loadPresetUI(data) { if (!data) return; Object.keys(data).forEach(key => { if (key === 'audio') { Object.keys(data.audio).forEach(aKey => { if (ui[aKey]) ui[aKey].value = data.audio[aKey]; }); } else { if (ui[key]) ui[key].value = data[key]; } }); syncReads(); if (!ui.enableTraj.checked) sendAudioParams(); resetModel(); }
+  function applyInterpolatedParams(p) { Object.keys(p).forEach(key => { if (key === 'audio') { Object.keys(p.audio).forEach(aKey => { if (ui[aKey]) ui[aKey].value = p.audio[aKey]; }); } else { if (ui[key]) ui[key].value = p[key]; } }); syncReads(); sendAudioParams(); }
+  function populateCustomPresets() { const c = getStoredPresets(); ui.customPresetGroup.innerHTML = ''; Object.keys(c).sort().forEach(name => { const o = document.createElement('option'); o.value = name; o.textContent = name; ui.customPresetGroup.appendChild(o); }); }
+  function updateInterpolation() {
+    const seg = Math.floor(trajectory.headT); const t = trajectory.headT - seg;
+    const p0 = trajectory.path[seg]; const p1 = trajectory.path[seg + 1] || p0;
+    if (p0) { trajectory.currentPos.x = lerp(p0.x, p1.x, t); trajectory.currentPos.y = lerp(p0.y, p1.y, t); }
+    const allPresets = { ...builtinPresets, ...getStoredPresets() }; const presetList = Object.entries(allPresets).map(([name, val]) => ({ name, ...val }));
+    let totalWeight = 0; const weights = presetList.map(p => { const dx = p.coords.x - trajectory.currentPos.x, dy = p.coords.y - trajectory.currentPos.y; const w = 1 / (dx*dx + dy*dy + 0.0001); totalWeight += w; return { name: p.name, weight: w }; });
+    let closestPresetName = weights.reduce((max, p) => p.weight > max.weight ? p : max, {weight:-1}).name;
+    const tempInterpolatedData = mergeWithDefaults(allPresets[closestPresetName].data, fullDefaultParams);
+    const numericKeys = Object.keys(params()).filter(k => k !== 'audio' && typeof params()[k] === 'number');
+    const audioNumericKeys = Object.keys(params().audio);
+    numericKeys.forEach(k => tempInterpolatedData[k] = 0); audioNumericKeys.forEach(k => tempInterpolatedData.audio[k] = 0);
+    presetList.forEach((p, i) => { const normWeight = weights[i].weight / totalWeight; const pData = mergeWithDefaults(p.data, fullDefaultParams); numericKeys.forEach(k => tempInterpolatedData[k] += pData[k] * normWeight); audioNumericKeys.forEach(k => tempInterpolatedData.audio[k] += pData.audio[k] * normWeight); });
+    interpolatedParams = tempInterpolatedData;
+    applyInterpolatedParams(interpolatedParams);
+  }
+  function advanceTrajectory(dt) {
+    if (!trajectory.isPlaying || trajectory.path.length < 2) return;
+    trajectory.headT += trajectory.speed * dt; const maxT = trajectory.path.length - 1;
+    if (trajectory.headT >= maxT) { trajectory.headT = maxT; trajectory.isPlaying = false; ui.playTraj.textContent = 'Play'; }
+  }
+
+  // ---------- UI events ----------
+  ui.minimalModeToggle.addEventListener('change', (e) => {
+    ui.app.classList.toggle('minimal', e.target.checked);
+    window.dispatchEvent(new Event('resize'));
+  });
+  ui.toggle.addEventListener("click", ()=>{ running=!running; ui.toggle.textContent = running ? "Pause" : "Run"; });
+  ui.zero.addEventListener("click", ()=> trace.clear()); ui.slow.addEventListener("click", ()=> timeScale=0.5); ui.norm.addEventListener("click", ()=> timeScale=1); ui.fast.addEventListener("click", ()=> timeScale=2);
+  ui.resetModel.addEventListener("click", ()=> {
+    if (ui.enableTraj.checked) { if(trajectory.path.length > 0) trajectory.currentPos = {...trajectory.path[0]}; updateInterpolation(); }
+    else { const n = ui.presetSelect.value; if (n !== '--') { const p = builtinPresets[n] || getStoredPresets()[n]; if (p) loadPresetUI(p.data); } } resetModel();
+  });
+  ui.startAudio.addEventListener("click", ()=> startAudio()); ui.stopAudio.addEventListener("click", ()=> stopAudio()); ui.panic.addEventListener("click", ()=> panic());
+  ui.presetSelect.addEventListener("change", (e) => { const n = e.target.value; if (n === '--') return; const p = builtinPresets[n] || getStoredPresets()[n]; if(p) { loadPresetUI(p.data); ui.deletePreset.disabled = !getStoredPresets()[n]; } });
+  ui.savePreset.addEventListener("click", () => { const n = prompt("Enter a name for your preset:", ""); if (!n || n.trim() === '') return; isPlacingPreset = { name: n, params: params() }; });
+  ui.deletePreset.addEventListener("click", () => { const n = ui.presetSelect.value; const c = getStoredPresets(); if (!c[n]) return; if (confirm(`Delete preset "${n}"?`)) { delete c[n]; saveStoredPresets(c); populateCustomPresets(); ui.presetSelect.value = 'normal'; ui.presetSelect.dispatchEvent(new Event('change')); } });
+  window.addEventListener("keydown", (e)=>{ if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; if(e.code==="Space"){ e.preventDefault(); if(audio.ctx && audio.ctx.state==="running") stopAudio(); else startAudio(); } });
+  const allUIInputs = document.querySelectorAll('input[type="range"], select:not(#presetSelect)');
+  allUIInputs.forEach(node => { const fn = () => { syncReads(); if(node.id === 'v0' || node.id === 'comp') resetModel(); if (!ui.enableTraj.checked) { ui.presetSelect.value = '--'; ui.deletePreset.disabled = true; } }; node.addEventListener("input", fn); });
+  ui.enableTraj.addEventListener('change', () => { if(!ui.enableTraj.checked) { ui.presetSelect.dispatchEvent(new Event('change')); } else { if(trajectory.path.length > 0) trajectory.currentPos = {...trajectory.path[0]}; else if (ui.presetSelect.value !== '--') { const p = builtinPresets[ui.presetSelect.value] || getStoredPresets()[ui.presetSelect.value]; if(p) trajectory.currentPos = {...p.coords}; } trajectory.headT = 0; updateInterpolation(); } });
+  ui.trajSpeed.addEventListener('input', () => { trajectory.speed = parseFloat(ui.trajSpeed.value); syncReads(); });
+  ui.playTraj.addEventListener('click', () => {
+    if(trajectory.path.length > 1 && trajectory.headT >= trajectory.path.length - 1) {
+        trajectory.headT = 0;
+        updateInterpolation();
+    }
+    trajectory.isPlaying = !trajectory.isPlaying;
+    ui.playTraj.textContent = trajectory.isPlaying ? 'Pause' : 'Play';
+  });
+  ui.rewindTraj.addEventListener('click', () => { trajectory.isPlaying = false; ui.playTraj.textContent = 'Play'; trajectory.headT = 0; if (trajectory.path.length > 0) { updateInterpolation(); } });
+  ui.clearTraj.addEventListener('click', () => { trajectory.path = []; trajectory.headT = 0; trajectory.isPlaying = false; ui.playTraj.textContent = 'Play'; });
+  ui.trajCv.addEventListener('click', (e) => {
+    const r = ui.trajCv.getBoundingClientRect(); const pad = 20; const x = clamp((e.clientX - r.left - pad) / (r.width - 2*pad), 0, 1); const y = 1 - clamp((e.clientY - r.top - pad) / (r.height - 2*pad), 0, 1);
+    if (isPlacingPreset) { const c = getStoredPresets(); c[isPlacingPreset.name] = { coords: {x,y}, data: isPlacingPreset.params }; saveStoredPresets(c); populateCustomPresets(); ui.presetSelect.value = isPlacingPreset.name; ui.deletePreset.disabled = false; isPlacingPreset = null; }
+    else { if(!trajectory.isPlaying){ trajectory.path.push({x,y}); if(trajectory.path.length === 1){ trajectory.currentPos = {x,y}; updateInterpolation(); } } }
+  });
+
+  function frame(now){
+    const dtReal = Math.min(0.05, (now-last)/1000); last=now;
+    if(ui.enableTraj.checked){
+      if(trajectory.isPlaying) advanceTrajectory(dtReal);
+      updateInterpolation();
+    }
+    if(running){ const dt = dtReal * timeScale; const steps = clamp(Math.ceil(dt/0.008), 1, 12); const h = dt/steps; for(let i=0;i<steps;i++) step(h); }
+    if(audio.ctx && audio.ctx.state==="running"){ if(now - audio.lastSend > 16){ sendModelToAudio(); audio.lastSend = now; } sendAudioParams(); }
+    updateAudioUI(); draw(); drawTrajectoryView();
+    fpsAcc += 1/Math.max(1e-6, dtReal); fpsN++;
+    if(now - fpsLast > 500){ ui.reads.fps.textContent = `${fmt(fpsAcc/fpsN,0)} fps`; fpsAcc=0; fpsN=0; fpsLast=now; }
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Init ----------
+  resize(); populateCustomPresets(); loadPresetUI(builtinPresets.normal.data); ui.presetSelect.value = 'normal';
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
+
