@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Breathing Instrument v3</title>
+<style>
+  :root { --bg:#0b0d10; --panel:#12151b; --ink:#e9eef5; --muted:#9aa7b6; --line:#232a35; --chip:#0f131a; }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; padding:16px;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    background: radial-gradient(1200px 800px at 20% 0%, #12151b, var(--bg));
+    color:var(--ink);
+  }
+  h1{margin:0 0 4px; font-size:18px;}
+  .sub{margin:0 0 12px; color:var(--muted); line-height:1.35; max-width:1100px; font-size:12px;}
+  .row{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start;}
+  .card{
+    background: color-mix(in srgb, var(--panel) 92%, black);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+  }
+  .card.big{flex:1 1 760px;}
+  .card.small{flex:0 1 320px;}
+  .btns{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+  button{
+    appearance:none; border:1px solid var(--line);
+    background:var(--chip); color:var(--ink);
+    padding:8px 10px; border-radius:10px;
+    cursor:pointer; font-weight:800; font-size:12px;
+  }
+  button.primary{border-color:#4aa3c7;}
+  button:disabled{opacity:0.55; cursor:not-allowed;}
+  .grid{display:grid; gap:10px;}
+  .grid.cols2{grid-template-columns:1fr 1fr;}
+  .label{display:flex; justify-content:space-between; gap:10px; color:var(--muted); font-size:11px; margin-top:6px;}
+  input[type="range"]{width:100%;}
+  .sep{height:1px; background:var(--line); margin:10px 0;}
+  .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;}
+  .tiny{font-size:11px; color:var(--muted); line-height:1.35;}
+
+  /* Voice grid: compact, side-by-side, minimal scrolling */
+  #voices{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap:10px;
+  }
+  .voice{
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:10px;
+    background: rgba(255,255,255,0.02);
+  }
+  .voiceHead{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
+  .name{font-weight:900; font-size:12px;}
+  .badge{font-size:10px; color:var(--muted); border:1px solid var(--line); padding:2px 7px; border-radius:999px;}
+</style>
+</head>
+<body>
+<h1>Breathing Instrument v3</h1>
+<p class="sub">
+  Changes: (1) when you press <b>Start Audio</b>, <b>all volumes start at 0</b> (master + per-voice). (2) More “breathing”:
+  inhale/exhale envelopes + turbulence + throat resonance + mouth hiss crossfade. (3) UI is compact: voices are in a responsive grid (side-by-side).
+</p>
+
+<div class="row">
+  <div class="card big">
+    <div class="btns">
+      <button id="startBtn" class="primary">Start Audio</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <button id="panicBtn">Panic</button>
+      <button id="humanSyncBtn">Sync All</button>
+      <button id="randBtn">Randomize Subtle</button>
+      <button id="zeroBtn">Zero All Volumes</button>
+    </div>
+
+    <div class="grid cols2">
+      <div>
+        <div class="label"><span>Master Volume</span><span id="masterVal" class="mono">0.00</span></div>
+        <input id="masterVol" type="range" min="0" max="1" step="0.001" value="0.00" />
+      </div>
+      <div>
+        <div class="label"><span>Global “Room” (tiny)</span><span id="roomVal" class="mono">0.10</span></div>
+        <input id="room" type="range" min="0" max="0.35" step="0.001" value="0.10" />
+      </div>
+    </div>
+
+    <div class="sep"></div>
+    <div id="voices"></div>
+  </div>
+
+  <div class="card small">
+    <div class="tiny">
+      <div><b>Navigation tips</b></div>
+      <ul>
+        <li>Start is silent. Bring up <b>Master</b> + a couple voices.</li>
+        <li>More breath / less wind: keep <b>Nose↔Mouth</b> closer to nose (0–0.5) and reduce <b>Roughness</b>.</li>
+        <li><b>Mouth</b> (towards 1) adds hiss. <b>Nose</b> (towards 0) adds smooth low resonance.</li>
+      </ul>
+      <div class="sep"></div>
+      <div class="mono">Works best in Chrome/Safari.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  let ctx = null;
+  let master = null;
+  let masterLimiter = null;
+  let convolver = null;
+  let convolverWet = null;
+  let convolverDry = null;
+
+  const active = new Map();
+  const clamp = (x,a,b)=>Math.min(b,Math.max(a,x));
+  const lerp = (a,b,t)=>a+(b-a)*t;
+
+  function createImpulse(seconds=1.0, decay=2.3){
+    const sr = ctx.sampleRate;
+    const len = Math.floor(sr * seconds);
+    const buf = ctx.createBuffer(2, len, sr);
+    for(let ch=0; ch<2; ch++){
+      const d = buf.getChannelData(ch);
+      for(let i=0; i<len; i++){
+        const t = i/len;
+        const n = (Math.random()*2-1) * (Math.random()*2-1);
+        d[i] = n * Math.pow(1 - t, decay);
+      }
+    }
+    return buf;
+  }
+
+  function createNoiseBuffer(seconds=2){
+    const sr = ctx.sampleRate;
+    const len = Math.floor(sr * seconds);
+    const buf = ctx.createBuffer(1, len, sr);
+    const d = buf.getChannelData(0);
+    for(let i=0; i<len; i++) d[i] = Math.random()*2 - 1;
+    return buf;
+  }
+
+  function createNoiseSource(){
+    const src = ctx.createBufferSource();
+    src.buffer = createNoiseBuffer(2);
+    src.loop = true;
+    src.start();
+    return src;
+  }
+
+  function ensureAudio(){
+    if(ctx) return;
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = ctx.createGain();
+    master.gain.value = 0.0; // Start silent
+
+    masterLimiter = ctx.createDynamicsCompressor();
+    masterLimiter.threshold.value = -16;
+    masterLimiter.knee.value = 20;
+    masterLimiter.ratio.value = 8;
+    masterLimiter.attack.value = 0.003;
+    masterLimiter.release.value = 0.12;
+
+    convolver = ctx.createConvolver();
+    convolver.buffer = createImpulse(1.0, 2.3);
+    convolverWet = ctx.createGain();
+    convolverDry = ctx.createGain();
+    convolverWet.gain.value = parseFloat(document.getElementById("room").value);
+    convolverDry.gain.value = 1.0;
+
+    master.connect(convolverDry);
+    master.connect(convolver);
+    convolver.connect(convolverWet);
+
+    const sum = ctx.createGain();
+    convolverDry.connect(sum);
+    convolverWet.connect(sum);
+    sum.connect(masterLimiter);
+    masterLimiter.connect(ctx.destination);
+  }
+
+  function updateNoseMouth(voice, t){
+    const nose = Math.cos(t * Math.PI * 0.5);
+    const mouth = Math.sin(t * Math.PI * 0.5);
+    voice.noseGain.gain.setTargetAtTime(nose, ctx.currentTime, 0.03);
+    voice.mouthGain.gain.setTargetAtTime(mouth, ctx.currentTime, 0.03);
+  }
+
+  function maybeTransient(voice, t0, inhaleDur, gap, exhaleDur){
+    const prob = voice.profile.transientProb || 0;
+    if(Math.random() > prob) return;
+
+    const when = t0 + inhaleDur + gap + exhaleDur * lerp(0.18, 0.55, Math.random());
+    const dur = lerp(0.05, 0.12, Math.random());
+
+    const tg = voice.transientGain.gain;
+    tg.cancelScheduledValues(when);
+    tg.setValueAtTime(0.00001, when);
+    tg.exponentialRampToValueAtTime(Math.max(0.00002, voice.params.vol * voice.profile.transientGain), when + dur*0.2);
+    tg.exponentialRampToValueAtTime(0.00001, when + dur);
+
+    voice.transientBP.frequency.setValueAtTime(voice.profile.transientFreq * lerp(0.85, 1.15, Math.random()), when);
+  }
+
+  function scheduleBreath(voice, startTime){
+    const now = ctx.currentTime;
+    const t0 = Math.max(startTime, now + 0.02);
+
+    const bpm = voice.params.rate;
+    const cycle = 60 / Math.max(1, bpm);
+
+    const inhalePortion = clamp(voice.profile.inhalePortion + (Math.random()-0.5)*0.05, 0.34, 0.6);
+    const gap = clamp(voice.profile.gap + (Math.random()-0.5)*0.03, 0.01, 0.10);
+    const inhaleDur = cycle * inhalePortion;
+    const exhaleDur = cycle * (1 - inhalePortion);
+
+    const v = voice.params.vol;
+    const intensity = clamp(voice.profile.intensity * (0.88 + Math.random()*0.28), 0, 1);
+
+    const g = voice.env.gain;
+
+    // Avoid hard resets to ~0 (common cause of clicks). Use a small floor + short linear ramps.
+    const floor = 0.00018;
+    const peakIn  = Math.max(floor, v * intensity * voice.profile.inhaleGain);
+    const peakOut = Math.max(floor, v * intensity * voice.profile.exhaleGain);
+
+    const attack = 0.045;      // 45ms soft attack
+    const toFloor = 0.020;     // 20ms glide to floor at cycle boundary
+    const tail = 0.020;        // keep a tiny tail before landing on floor
+
+    // Start from current value to prevent discontinuity, then glide to floor before next inhale.
+    const current = Math.max(floor, (typeof g.value === "number" ? g.value : floor));
+
+    g.cancelScheduledValues(t0);
+    g.setValueAtTime(current, t0);
+    g.linearRampToValueAtTime(floor, t0 + toFloor);
+
+    // Inhale
+    g.linearRampToValueAtTime(peakIn, t0 + toFloor + attack);
+    g.exponentialRampToValueAtTime(Math.max(floor, peakIn * 0.62), t0 + inhaleDur);
+
+    // Pause
+    g.linearRampToValueAtTime(floor, t0 + inhaleDur + gap);
+
+    // Exhale
+    g.linearRampToValueAtTime(peakOut, t0 + inhaleDur + gap + attack);
+    g.exponentialRampToValueAtTime(floor, t0 + inhaleDur + gap + exhaleDur - tail);
+    g.linearRampToValueAtTime(floor, t0 + inhaleDur + gap + exhaleDur);
+
+    // Tone automation
+    const base = voice.params.pitch;
+    const nm = voice.params.noseMouth;
+    const bright = lerp(0.95, 1.35, nm);
+
+    voice.breathBP.frequency.cancelScheduledValues(t0);
+    voice.breathBP.frequency.setValueAtTime(base*0.95, t0);
+    voice.breathBP.frequency.linearRampToValueAtTime(base*bright, t0 + inhaleDur + gap + exhaleDur*0.55);
+    voice.breathBP.frequency.linearRampToValueAtTime(base, t0 + inhaleDur + gap + exhaleDur);
+
+    updateNoseMouth(voice, nm);
+
+    // Smooth parameter changes to avoid zipper/clicks
+    const r = voice.params.rough;
+    const tc = 0.12; // 120ms smoothing
+    voice.hissGain.gain.setTargetAtTime(lerp(0.01, 0.18, r) * lerp(0.05, 1.0, nm), t0, tc);
+    voice.turbGain.gain.setTargetAtTime(lerp(0.03, 0.16, r), t0, tc);
+    voice.throatGain.gain.setTargetAtTime(lerp(0.10, 0.02, nm), t0, tc);
+
+    // Formant drift
+    const f1 = voice.form1.frequency, f2 = voice.form2.frequency;
+    const f1b = voice.profile.formant1 * lerp(0.96, 1.06, Math.random());
+    const f2b = voice.profile.formant2 * lerp(0.96, 1.06, Math.random());
+    f1.cancelScheduledValues(t0); f2.cancelScheduledValues(t0);
+    f1.setValueAtTime(f1b*0.98, t0);
+    f1.linearRampToValueAtTime(f1b*1.05, t0 + inhaleDur + gap + exhaleDur*0.6);
+    f1.linearRampToValueAtTime(f1b*0.99, t0 + inhaleDur + gap + exhaleDur);
+    f2.setValueAtTime(f2b*0.99, t0);
+    f2.linearRampToValueAtTime(f2b*1.03, t0 + inhaleDur + gap + exhaleDur*0.6);
+    f2.linearRampToValueAtTime(f2b*1.00, t0 + inhaleDur + gap + exhaleDur);
+
+    maybeTransient(voice, t0, inhaleDur, gap, exhaleDur);
+
+    const next = t0 + inhaleDur + gap + exhaleDur;
+    voice._nextTime = next;
+    voice._timer = setTimeout(() => {
+      if(!ctx || !active.has(voice.id)) return;
+      scheduleBreath(voice, voice._nextTime);
+    }, Math.max(10, (next - ctx.currentTime - 0.02) * 1000));
+  }
+
+  function rescheduleSoon(voice){
+    if(!ctx) return;
+    if(voice._timer) clearTimeout(voice._timer);
+    // Use a consistent floor + time constant to avoid abrupt envelope jumps
+    voice.env.gain.setTargetAtTime(0.00018, ctx.currentTime, 0.05);
+    scheduleBreath(voice, ctx.currentTime + 0.11);
+  }
+
+  function stopAll(){
+    for(const v of active.values()){
+      if(v._timer) clearTimeout(v._timer);
+      try { v.noise.stop(); } catch(e) {}
+      try { v.hiss.stop(); } catch(e) {}
+    }
+    active.clear();
+  }
+
+  function panic(){
+    if(!ctx || !master) return;
+    master.gain.cancelScheduledValues(ctx.currentTime);
+    master.gain.setTargetAtTime(0.00001, ctx.currentTime, 0.02);
+  }
+
+  const profiles = [
+    { id:"child",  name:"Child",  badge:"small / quick", rate:26, pitch:980,  noseMouth:0.45, rough:0.28, vol:0.00,
+      inhalePortion:0.46, gap:0.045, intensity:0.75, inhaleGain:0.95, exhaleGain:1.00, formant1:900, formant2:1600 },
+    { id:"woman",  name:"Woman",  badge:"warm / steady", rate:18, pitch:760,  noseMouth:0.35, rough:0.24, vol:0.00,
+      inhalePortion:0.48, gap:0.050, intensity:0.78, inhaleGain:0.95, exhaleGain:1.05, formant1:720, formant2:1350 },
+    { id:"man",    name:"Man",    badge:"low / calm",    rate:14, pitch:520,  noseMouth:0.30, rough:0.30, vol:0.00,
+      inhalePortion:0.50, gap:0.055, intensity:0.85, inhaleGain:0.92, exhaleGain:1.08, formant1:520, formant2:980 },
+    { id:"robot",  name:"Robot",  badge:"mechanical",    rate:20, pitch:430,  noseMouth:0.85, rough:0.55, vol:0.00,
+      inhalePortion:0.42, gap:0.030, intensity:0.72, inhaleGain:0.85, exhaleGain:1.15, formant1:410, formant2:820,
+      transientProb:0.22, transientGain:0.10, transientFreq:980 },
+    { id:"ants",   name:"Ants",   badge:"micro / high",  rate:52, pitch:1600, noseMouth:0.80, rough:0.18, vol:0.00,
+      inhalePortion:0.40, gap:0.020, intensity:0.55, inhaleGain:0.90, exhaleGain:0.95, formant1:1700, formant2:2200 },
+    { id:"elephant", name:"Elephant", badge:"huge / trunk", rate:7.5, pitch:240, noseMouth:0.10, rough:0.42, vol:0.00,
+      inhalePortion:0.52, gap:0.070, intensity:0.92, inhaleGain:0.92, exhaleGain:1.10, formant1:260, formant2:520,
+      transientProb:0.18, transientGain:0.14, transientFreq:380 },
+    { id:"cat",    name:"Cat",    badge:"soft",          rate:24, pitch:980,  noseMouth:0.25, rough:0.16, vol:0.00,
+      inhalePortion:0.46, gap:0.040, intensity:0.62, inhaleGain:0.95, exhaleGain:1.02, formant1:980, formant2:1800 },
+    { id:"horse",  name:"Horse",  badge:"snort-ish",     rate:10.5, pitch:360, noseMouth:0.70, rough:0.52, vol:0.00,
+      inhalePortion:0.50, gap:0.060, intensity:0.88, inhaleGain:0.90, exhaleGain:1.12, formant1:380, formant2:760,
+      transientProb:0.30, transientGain:0.16, transientFreq:620 },
+  ];
+
+  function buildVoice(profile, idx){
+    ensureAudio();
+    const id = profile.id;
+
+    const noise = createNoiseSource();
+    const hiss  = createNoiseSource();
+
+    const breathHP = ctx.createBiquadFilter(); breathHP.type="highpass"; breathHP.frequency.value = 45;
+    const breathLP = ctx.createBiquadFilter(); breathLP.type="lowpass";  breathLP.frequency.value = 4200;
+    const breathBP = ctx.createBiquadFilter(); breathBP.type="bandpass"; breathBP.frequency.value = profile.pitch; breathBP.Q.value = 0.85;
+
+    const form1 = ctx.createBiquadFilter(); form1.type="bandpass"; form1.frequency.value = profile.formant1; form1.Q.value = 4.2;
+    const form2 = ctx.createBiquadFilter(); form2.type="bandpass"; form2.frequency.value = profile.formant2; form2.Q.value = 3.0;
+
+    const throatBP = ctx.createBiquadFilter(); throatBP.type="bandpass"; throatBP.frequency.value = lerp(120, 240, clamp(profile.pitch/900, 0, 1)); throatBP.Q.value = 1.2;
+    const throatGain = ctx.createGain(); throatGain.gain.value = 0.08;
+
+    const turbHP = ctx.createBiquadFilter(); turbHP.type="highpass"; turbHP.frequency.value = 900;
+    const turbGain = ctx.createGain(); turbGain.gain.value = 0.06;
+
+    const hissHP = ctx.createBiquadFilter(); hissHP.type="highpass"; hissHP.frequency.value = 1600;
+    const hissBP = ctx.createBiquadFilter(); hissBP.type="bandpass";  hissBP.frequency.value = 3200; hissBP.Q.value = 0.7;
+    const hissGain = ctx.createGain(); hissGain.gain.value = 0.02;
+
+    const noseLP = ctx.createBiquadFilter(); noseLP.type="lowpass";  noseLP.frequency.value = 2200;
+    const mouthHP = ctx.createBiquadFilter(); mouthHP.type="highpass"; mouthHP.frequency.value = 200;
+
+    const noseGain = ctx.createGain(); noseGain.gain.value = 0.75;
+    const mouthGain = ctx.createGain(); mouthGain.gain.value = 0.25;
+
+    const env = ctx.createGain(); env.gain.value = 0.00001;
+    const outGain = ctx.createGain(); outGain.gain.value = 1.0;
+
+    const transientBP = ctx.createBiquadFilter(); transientBP.type="bandpass"; transientBP.frequency.value = profile.transientFreq || 900; transientBP.Q.value = 6;
+    const transientGain = ctx.createGain(); transientGain.gain.value = 0.00001;
+
+    // Routing
+    noise.connect(breathHP); breathHP.connect(breathLP); breathLP.connect(breathBP);
+    breathBP.connect(form1); form1.connect(form2);
+
+    breathLP.connect(throatBP); throatBP.connect(throatGain); throatGain.connect(env);
+    form2.connect(turbHP); turbHP.connect(turbGain); turbGain.connect(env);
+
+    form2.connect(noseLP); noseLP.connect(noseGain); noseGain.connect(env);
+    form2.connect(mouthHP); mouthHP.connect(mouthGain); mouthGain.connect(env);
+
+    hiss.connect(hissHP); hissHP.connect(hissBP); hissBP.connect(hissGain); hissGain.connect(env);
+
+    noise.connect(transientBP); transientBP.connect(transientGain); transientGain.connect(outGain);
+
+    env.connect(outGain);
+    outGain.connect(master);
+
+    const voice = {
+      id, profile,
+      params: { vol: profile.vol, rate: profile.rate, pitch: profile.pitch, noseMouth: profile.noseMouth, rough: profile.rough },
+      noise, hiss,
+      env,
+      breathBP, form1, form2,
+      throatGain,
+      turbGain, hissGain,
+      noseLP, mouthHP, noseGain, mouthGain,
+      transientBP, transientGain,
+      nodes: { outGain },
+      _timer:null, _nextTime:0
+    };
+
+    updateNoseMouth(voice, voice.params.noseMouth);
+
+    const wrap = document.createElement("div");
+    wrap.className = "voice";
+    wrap.innerHTML = `
+      <div class="voiceHead">
+        <div class="name">${profile.name}</div>
+        <div class="badge">${profile.badge}</div>
+      </div>
+
+      <div class="label"><span>Volume</span><span class="mono" id="${id}-volv">${voice.params.vol.toFixed(2)}</span></div>
+      <input id="${id}-vol" type="range" min="0" max="1" step="0.001" value="${voice.params.vol}"/>
+
+      <div class="label"><span>Breaths / min</span><span class="mono" id="${id}-ratev">${voice.params.rate.toFixed(1)}</span></div>
+      <input id="${id}-rate" type="range" min="4" max="70" step="0.1" value="${voice.params.rate}"/>
+
+      <div class="label"><span>Breath Tone</span><span class="mono" id="${id}-pitchv">${Math.round(voice.params.pitch)} Hz</span></div>
+      <input id="${id}-pitch" type="range" min="120" max="2200" step="1" value="${voice.params.pitch}"/>
+
+      <div class="label"><span>Nose ↔ Mouth</span><span class="mono" id="${id}-nmv">${voice.params.noseMouth.toFixed(2)}</span></div>
+      <input id="${id}-nm" type="range" min="0" max="1" step="0.001" value="${voice.params.noseMouth}"/>
+
+      <div class="label"><span>Roughness</span><span class="mono" id="${id}-roughv">${voice.params.rough.toFixed(2)}</span></div>
+      <input id="${id}-rough" type="range" min="0" max="1" step="0.001" value="${voice.params.rough}"/>
+    `;
+    document.getElementById("voices").appendChild(wrap);
+
+    const $ = (s)=>document.getElementById(s);
+
+    $(`${id}-vol`).addEventListener("input", (e)=>{
+      voice.params.vol = parseFloat(e.target.value);
+      $(`${id}-volv`).textContent = voice.params.vol.toFixed(2);
+      voice.nodes.outGain.gain.setTargetAtTime(lerp(0.2, 1.0, clamp(voice.params.vol,0,1)), ctx.currentTime, 0.03);
+      rescheduleSoon(voice);
+    });
+
+    $(`${id}-rate`).addEventListener("input", (e)=>{
+      voice.params.rate = parseFloat(e.target.value);
+      $(`${id}-ratev`).textContent = voice.params.rate.toFixed(1);
+      rescheduleSoon(voice);
+    });
+
+    $(`${id}-pitch`).addEventListener("input", (e)=>{
+      voice.params.pitch = parseFloat(e.target.value);
+      $(`${id}-pitchv`).textContent = `${Math.round(voice.params.pitch)} Hz`;
+      rescheduleSoon(voice);
+    });
+
+    $(`${id}-nm`).addEventListener("input", (e)=>{
+      voice.params.noseMouth = parseFloat(e.target.value);
+      $(`${id}-nmv`).textContent = voice.params.noseMouth.toFixed(2);
+      updateNoseMouth(voice, voice.params.noseMouth);
+      rescheduleSoon(voice);
+    });
+
+    $(`${id}-rough`).addEventListener("input", (e)=>{
+      voice.params.rough = parseFloat(e.target.value);
+      $(`${id}-roughv`).textContent = voice.params.rough.toFixed(2);
+      rescheduleSoon(voice);
+    });
+
+    active.set(id, voice);
+    scheduleBreath(voice, ctx.currentTime + 0.06 + idx*0.02);
+  }
+
+  function buildUI(){
+    const voicesDiv = document.getElementById("voices");
+    voicesDiv.innerHTML = "";
+    profiles.forEach((p, i)=>buildVoice(p, i));
+  }
+
+  // Buttons
+  const startBtn = document.getElementById("startBtn");
+  const stopBtn  = document.getElementById("stopBtn");
+  const panicBtn = document.getElementById("panicBtn");
+  const humanSyncBtn = document.getElementById("humanSyncBtn");
+  const randBtn = document.getElementById("randBtn");
+  const zeroBtn = document.getElementById("zeroBtn");
+
+  function setAllVolumesToZero(){
+    for(const p of profiles){
+      const volEl = document.getElementById(`${p.id}-vol`);
+      const volvEl = document.getElementById(`${p.id}-volv`);
+      if(volEl){
+        volEl.value = "0";
+        volvEl.textContent = "0.00";
+      }
+      const v = active.get(p.id);
+      if(v){
+        v.params.vol = 0.0;
+        v.env.gain.setTargetAtTime(0.00001, ctx.currentTime, 0.02);
+      }
+    }
+    const m = document.getElementById("masterVol");
+    const mv = document.getElementById("masterVal");
+    m.value = "0";
+    mv.textContent = "0.00";
+    if(master && ctx) master.gain.setTargetAtTime(0.0, ctx.currentTime, 0.03);
+  }
+
+  startBtn.addEventListener("click", async () => {
+    ensureAudio();
+    await ctx.resume();
+
+    // Start silent
+    document.getElementById("masterVol").value = "0";
+    document.getElementById("masterVal").textContent = "0.00";
+    master.gain.setValueAtTime(0.0, ctx.currentTime);
+
+    buildUI();
+    setAllVolumesToZero();
+
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+  });
+
+  stopBtn.addEventListener("click", async () => {
+    stopAll();
+    if(ctx){
+      const c = ctx;
+      ctx = null;
+      try { await c.close(); } catch(e) {}
+    }
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+  });
+
+  panicBtn.addEventListener("click", panic);
+
+  document.getElementById("masterVol").addEventListener("input", (e)=>{
+    const v = parseFloat(e.target.value);
+    document.getElementById("masterVal").textContent = v.toFixed(2);
+    if(master && ctx) master.gain.setTargetAtTime(v, ctx.currentTime, 0.04);
+  });
+
+  document.getElementById("room").addEventListener("input", (e)=>{
+    const v = parseFloat(e.target.value);
+    document.getElementById("roomVal").textContent = v.toFixed(2);
+    if(convolverWet && ctx) convolverWet.gain.setTargetAtTime(v, ctx.currentTime, 0.05);
+  });
+
+  humanSyncBtn.addEventListener("click", ()=>{
+    if(!ctx) return;
+    const t = ctx.currentTime + 0.10;
+    // Sync EVERY voice (humans + robot + ants + elephant + cat + horse)
+    for(const id of active.keys()){
+      const v = active.get(id);
+      if(!v) continue;
+      if(v._timer) clearTimeout(v._timer);
+      scheduleBreath(v, t);
+    }
+  });
+
+  randBtn.addEventListener("click", ()=>{
+    for(const p of profiles){
+      const v = active.get(p.id);
+      if(!v) continue;
+
+      const rate  = clamp(v.params.rate * lerp(0.92, 1.08, Math.random()), 4, 70);
+      const pitch = clamp(v.params.pitch * lerp(0.92, 1.10, Math.random()), 120, 2200);
+      const nm    = clamp(v.params.noseMouth + (Math.random()-0.5)*0.10, 0, 1);
+      const rough = clamp(v.params.rough + (Math.random()-0.5)*0.14, 0, 1);
+
+      v.params.rate = rate;
+      v.params.pitch = pitch;
+      v.params.noseMouth = nm;
+      v.params.rough = rough;
+
+      const $ = (s)=>document.getElementById(s);
+      $(`${p.id}-rate`).value = rate;   $(`${p.id}-ratev`).textContent  = rate.toFixed(1);
+      $(`${p.id}-pitch`).value = pitch; $(`${p.id}-pitchv`).textContent = `${Math.round(pitch)} Hz`;
+      $(`${p.id}-nm`).value = nm;       $(`${p.id}-nmv`).textContent    = nm.toFixed(2);
+      $(`${p.id}-rough`).value = rough; $(`${p.id}-roughv`).textContent = rough.toFixed(2);
+
+      updateNoseMouth(v, nm);
+      rescheduleSoon(v);
+    }
+  });
+
+  zeroBtn.addEventListener("click", ()=>{
+    if(!ctx) return;
+    setAllVolumesToZero();
+  });
+
+})();
+</script>
+</body>
+</html>
