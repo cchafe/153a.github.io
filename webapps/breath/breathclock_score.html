@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pie-Score Ensemble Clock</title>
+  <style>
+    :root{
+      --bg:#d9d9d9;
+      --ui:#111;
+      --panel: rgba(255,255,255,0.75);
+      --panelBorder: rgba(0,0,0,0.12);
+      --yellow:#ffd400;
+    }
+    html,body{height:100%; margin:0; background:var(--bg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;}
+    #wrap{height:100%; display:grid; place-items:center;}
+    canvas{display:block; width:min(92vmin, 980px); height:min(92vmin, 980px); }
+    .panel{
+      position:fixed; left:14px; top:14px;
+      background:var(--panel); border:1px solid var(--panelBorder);
+      border-radius:14px; padding:12px 14px;
+      backdrop-filter: blur(8px);
+      color:var(--ui);
+      max-width:min(520px, calc(100vw - 28px));
+    }
+    .row{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+    .row + .row{margin-top:10px;}
+    label{font-size:13px; opacity:.9;}
+    input[type="range"]{width:240px;}
+    .btn{
+      border:1px solid rgba(0,0,0,0.15);
+      background:white; border-radius:10px;
+      padding:6px 10px; cursor:pointer;
+    }
+    .pill{
+      font-size:12px; padding:3px 8px; border-radius:999px;
+      background:rgba(0,0,0,0.06);
+    }
+    .hint{font-size:12px; opacity:.75; line-height:1.25;}
+    kbd{
+      font-size:11px; padding:2px 6px; border-radius:6px;
+      border:1px solid rgba(0,0,0,0.2);
+      background:rgba(255,255,255,0.9);
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div class="row">
+      <button id="toggle" class="btn">Pause</button>
+      <span class="pill">Period: <b id="periodRead">8.0</b>s / revolution</span>
+      <span class="pill">Slices: <b id="sliceRead">24</b></span>
+    </div>
+
+    <div class="row">
+      <label for="period">Revolution period</label>
+      <input id="period" type="range" min="60" max="300" step="0.1" value="8" />
+    </div>
+
+    <div class="row">
+      <label for="slices">Number of slices</label>
+      <input id="slices" type="range" min="6" max="64" step="1" value="24" />
+    </div>
+
+    <div class="row">
+      <label for="subdiv">Band turns per slice (navy → purple → pink)</label>
+      <input id="subdiv" type="range" min="2" max="6" step="1" value="3" />
+      <span class="pill"><b id="subdivRead">3</b></span>
+    </div>
+
+    <div class="hint">
+      The “hand” rotates once per period, highlighting the active wedge.
+      Inside the active wedge, the yellow outline steps through the radial bands
+      (navy first, then purple, then pink, etc.) to show whose turn it is.
+      <div style="margin-top:6px;">Shortcuts: <kbd>Space</kbd> play/pause · <kbd>R</kbd> reseed pattern</div>
+    </div>
+  </div>
+
+  <div id="wrap">
+    <canvas id="c"></canvas>
+  </div>
+
+  <script>
+    // ---------- Utilities ----------
+    const TAU = Math.PI * 2;
+    const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+    function mulberry32(seed){
+      return function() {
+        let t = seed += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      }
+    }
+
+    // ---------- App State ----------
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+
+    const periodEl = document.getElementById('period');
+    const slicesEl = document.getElementById('slices');
+    const subdivEl = document.getElementById('subdiv');
+
+    const periodRead = document.getElementById('periodRead');
+    const sliceRead  = document.getElementById('sliceRead');
+    const subdivRead = document.getElementById('subdivRead');
+    const toggleBtn  = document.getElementById('toggle');
+
+    const colors = {
+      bg:   getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
+      navy: '#0b1a73',
+      purple:'#4a0b4f',
+      pink: '#c1005a',
+      wedgeOutline: 'rgba(255,255,255,0.85)',
+      activeWash: 'rgba(255,255,255,0.18)',
+      hand: 'rgba(20,20,20,0.95)',
+      yellow: getComputedStyle(document.documentElement).getPropertyValue('--yellow').trim(),
+    };
+
+    let running = true;
+    let t0 = performance.now();
+    let pausedAt = 0;
+
+    let seed = 1234567;
+    let rng = mulberry32(seed);
+
+    // pattern data per slice: band radii fractions and optional varied hues
+    let N = +slicesEl.value;
+    let bandsPerSlice = 3; // default, driven by subdiv slider conceptually
+    let sliceData = [];
+
+    function reseed(){
+      seed = (Math.random() * 1e9) | 0;
+      rng = mulberry32(seed);
+      buildSlices();
+    }
+
+    function buildSlices(){
+      N = +slicesEl.value;
+      sliceData = new Array(N).fill(0).map(()=> {
+        // 3 bands by default (navy/purple/pink), but we’ll allow visual variation in thickness
+        // We'll store cumulative radii fractions from center -> outside.
+        const a = 0.25 + rng()*0.18; // navy thickness
+        const b = 0.20 + rng()*0.22; // purple thickness
+        const c = 1.0 - (a+b);       // pink thickness (rest)
+        const cuts = [a, a+b, 1.0];
+        // Optionally nudge a slice to have a "gap" feel by shortening outer radius
+        const outerScale = 0.72 + rng()*0.28; // makes some slices shorter like your reference
+        return { cuts, outerScale };
+      });
+      sliceRead.textContent = String(N);
+    }
+
+    buildSlices();
+
+    // ---------- Canvas resize ----------
+    function resize(){
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // ---------- UI ----------
+    function updateUI(){
+      periodRead.textContent = (+periodEl.value).toFixed(1);
+      sliceRead.textContent = String(+slicesEl.value);
+      subdivRead.textContent = String(+subdivEl.value);
+    }
+    periodEl.addEventListener('input', updateUI);
+    slicesEl.addEventListener('input', ()=>{ buildSlices(); updateUI(); });
+    subdivEl.addEventListener('input', updateUI);
+    updateUI();
+
+    toggleBtn.addEventListener('click', ()=>toggle());
+    function toggle(){
+      running = !running;
+      toggleBtn.textContent = running ? 'Pause' : 'Play';
+      if(!running){
+        pausedAt = performance.now();
+      }else{
+        // shift t0 forward by the pause duration so phase doesn’t jump
+        const now = performance.now();
+        const pausedDur = now - pausedAt;
+        t0 += pausedDur;
+      }
+    }
+
+    window.addEventListener('keydown', (e)=>{
+      if(e.code === 'Space'){ e.preventDefault(); toggle(); }
+      if(e.key.toLowerCase() === 'r'){ reseed(); }
+    });
+
+    // ---------- Drawing helpers ----------
+    function drawWedgeRing(cx, cy, a0, a1, rInner, rOuter, fillStyle){
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a0)*rInner, cy + Math.sin(a0)*rInner);
+      ctx.arc(cx, cy, rOuter, a0, a1, false);
+      ctx.lineTo(cx + Math.cos(a1)*rInner, cy + Math.sin(a1)*rInner);
+      ctx.arc(cx, cy, rInner, a1, a0, true);
+      ctx.closePath();
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+    }
+
+    function strokeWedgeRing(cx, cy, a0, a1, rInner, rOuter, strokeStyle, lineWidth){
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a0)*rInner, cy + Math.sin(a0)*rInner);
+      ctx.arc(cx, cy, rOuter, a0, a1, false);
+      ctx.lineTo(cx + Math.cos(a1)*rInner, cy + Math.sin(a1)*rInner);
+      ctx.arc(cx, cy, rInner, a1, a0, true);
+      ctx.closePath();
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // "Yellow highlighted bounding box" in a polar wedge:
+    // We’ll outline the band polygon in yellow, which reads like a bounding highlight.
+    function highlightBand(cx, cy, a0, a1, rInner, rOuter){
+      ctx.save();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = colors.yellow;
+      ctx.shadowColor = 'rgba(0,0,0,0.22)';
+      ctx.shadowBlur = 6;
+      strokeWedgeRing(cx, cy, a0, a1, rInner, rOuter, colors.yellow, 3);
+      ctx.restore();
+    }
+
+    function drawHand(cx, cy, angle, r){
+      ctx.save();
+      ctx.strokeStyle = colors.hand;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle)*r, cy + Math.sin(angle)*r);
+      ctx.stroke();
+
+      // center hub
+      ctx.fillStyle = colors.hand;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 6, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // ---------- Main render ----------
+    function render(now){
+      if(!running) { requestAnimationFrame(render); return; }
+
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width, h = rect.height;
+      const cx = w/2, cy = h/2;
+
+      // clear
+      ctx.clearRect(0,0,w,h);
+      ctx.fillStyle = colors.bg;
+      ctx.fillRect(0,0,w,h);
+
+      const period = +periodEl.value; // seconds per revolution
+      const t = (now - t0) / 1000;    // seconds
+      const phase = (t / period) % 1; // 0..1
+      const handAngle = -Math.PI/2 + phase * TAU; // start at top
+
+      const innerHole = Math.min(w,h) * 0.035;  // small hub hole-ish
+      const baseR = Math.min(w,h) * 0.42;       // max radius
+      const sliceWidth = TAU / N;
+
+      // Determine active slice by hand angle, but we want it to “snap” to slice for highlighting.
+      // Convert hand angle to 0..TAU with 0 at -PI/2
+      let theta = (handAngle + Math.PI/2);
+      theta = (theta % TAU + TAU) % TAU;
+      const activeIdx = Math.floor(theta / sliceWidth);
+
+      // Determine "band turn" inside active slice (navy -> purple -> pink etc.)
+      const subTurns = +subdivEl.value; // how many band-steps per slice traversal
+      const slicePhase = (theta / sliceWidth) - activeIdx; // 0..1 within slice
+      const turnIdx = Math.floor(clamp(slicePhase, 0, 0.999999) * subTurns); // 0..subTurns-1
+
+      // Color order for turns (cycles if subdiv > 3)
+      const turnColors = [colors.navy, colors.purple, colors.pink];
+      const whichBand = turnIdx % turnColors.length; // 0=navy 1=purple 2=pink
+
+      // Draw slices
+      for(let i=0;i<N;i++){
+        const a0 = -Math.PI/2 + i*sliceWidth + 0.012; // slight gap
+        const a1 = -Math.PI/2 + (i+1)*sliceWidth - 0.012;
+
+        const d = sliceData[i];
+        const rOuter = baseR * d.outerScale;
+
+        // band cuts (fractions of rOuter)
+        const r1 = innerHole + (rOuter-innerHole) * d.cuts[0];
+        const r2 = innerHole + (rOuter-innerHole) * d.cuts[1];
+        const r3 = innerHole + (rOuter-innerHole) * d.cuts[2];
+
+        // draw navy (inner), purple (mid), pink (outer)
+        drawWedgeRing(cx, cy, a0, a1, innerHole, r1, colors.navy);
+        drawWedgeRing(cx, cy, a0, a1, r1, r2, colors.purple);
+        drawWedgeRing(cx, cy, a0, a1, r2, r3, colors.pink);
+
+        // white-ish wedge separator outline
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        strokeWedgeRing(cx, cy, a0, a1, innerHole, r3, colors.wedgeOutline, 2);
+        ctx.restore();
+
+        // active slice wash + stronger outline
+        if(i === activeIdx){
+          ctx.save();
+          ctx.globalAlpha = 1;
+          // translucent overlay to "highlight one section at a time"
+          drawWedgeRing(cx, cy, a0, a1, innerHole, r3, colors.activeWash);
+          // stronger rim
+          strokeWedgeRing(cx, cy, a0, a1, innerHole, r3, colors.yellow, 2);
+          ctx.restore();
+
+          // highlight a band inside the active slice in a yellow outline:
+          // choose navy first, then purple, then pink, etc.
+          const bandR = [ [innerHole, r1], [r1, r2], [r2, r3] ][whichBand];
+          highlightBand(cx, cy, a0, a1, bandR[0], bandR[1]);
+        }
+      }
+
+      // Draw the rotating "hand"
+      drawHand(cx, cy, handAngle, baseR * 0.98);
+
+      // subtle center ring
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, innerHole, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+
+      requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
