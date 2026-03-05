@@ -44,7 +44,8 @@ Most apps are self-contained HTML files with inline CSS/JS that rely on:
 └── README.md
 ```
 
-## Current Collections
+## Current Collection
+Check out our current work!
 
 ### `webapps/moss/`
 

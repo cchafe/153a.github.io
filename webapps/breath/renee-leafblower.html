@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Leafblower — Breath Sonification</title>
+  <style>
+    :root { --bg:#0b0f17; --panel:#101827; --muted:#93a4bf; --text:#e8eefc; --accent:#7dd3fc; --accent2:#a7f3d0; }
+    html, body { height: 100%; margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background: radial-gradient(1000px 500px at 20% 0%, #182443, var(--bg)); color: var(--text); }
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 24px; }
+    .title { display:flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+    h1 { margin: 0; font-size: 28px; letter-spacing: 0.2px; }
+    h2 { margin: 0 0 8px 0; font-size: 18px; letter-spacing: 0.2px; }
+    .tag { color: var(--muted); font-size: 14px; }
+    .grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 16px; margin-top: 16px; }
+    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015)); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.35); }
+    .row { display:flex; gap: 12px; align-items:center; flex-wrap: wrap; }
+    .row.space { justify-content: space-between; }
+    .btn {
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 14px;
+      cursor: pointer;
+      user-select: none;
+      transition: transform 0.06s ease, background 0.12s ease;
+    }
+    .btn:hover { background: rgba(255,255,255,0.10); }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: rgba(125,211,252,0.18); border-color: rgba(125,211,252,0.35); }
+    .btn.danger { background: rgba(248,113,113,0.12); border-color: rgba(248,113,113,0.25); }
+    .btn.hold { padding: 14px 18px; font-weight: 700; letter-spacing: 0.3px; }
+    .btn.hold.active { background: rgba(167,243,208,0.18); border-color: rgba(167,243,208,0.35); }
+    .btn.small { padding: 8px 10px; border-radius: 12px; font-size: 13px; }
+    select, input[type="range"] { accent-color: var(--accent); }
+    .kv { display:grid; grid-template-columns: 160px 1fr; gap: 10px; align-items: center; margin: 10px 0; }
+    .kv label { color: var(--muted); font-size: 13px; }
+    .kv .val { color: var(--text); font-variant-numeric: tabular-nums; font-size: 13px; text-align:right; }
+    .slider { display:grid; grid-template-columns: 1fr 70px; gap: 10px; align-items:center; }
+    .muted { color: var(--muted); font-size: 13px; line-height: 1.4; }
+    canvas { width: 100%; height: 180px; background: rgba(0,0,0,0.20); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; }
+    .pill { display:inline-flex; gap:8px; align-items:center; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: var(--muted); font-size: 12px; }
+    .dot { width:8px; height:8px; border-radius:999px; background: #ef4444; box-shadow: 0 0 18px rgba(239,68,68,0.35); }
+    .dot.on { background: #34d399; box-shadow: 0 0 18px rgba(52,211,153,0.35); }
+    .footer { margin-top: 14px; display:flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; font-size: 12px; padding: 2px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.18); color: var(--text); }
+    .sep { margin: 14px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.08); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; font-size: 12px; }
+    .station {
+      display:grid; grid-template-columns: 1fr auto; gap: 8px; align-items:center;
+      padding: 10px 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.16);
+    }
+    .station b { font-size: 13px; }
+    .station .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title">
+      <h1>Leafblower</h1>
+      <div class="tag">breath sonification • logistic-map turbulence • “dandelion blow” • + Radio Breathing</div>
+    </div>
+
+    <div class="grid">
+      <!-- LEFT: audio + visuals -->
+      <div class="card">
+        <div class="row space">
+          <div class="row">
+            <button id="startBtn" class="btn primary">Start Audio</button>
+            <button id="stopBtn" class="btn danger">Stop</button>
+            <span class="pill"><span id="audiodot" class="dot"></span><span id="audiostatus">audio: off</span></span>
+          </div>
+          <div class="row">
+            <label class="muted">Leafblower preset</label>
+            <select id="presetSel" class="btn" style="padding:10px 12px;">
+              <option value="normal">Normal</option>
+              <option value="obstructed">Obstructed</option>
+              <option value="panic">Panic</option>
+              <option value="sigh">Sigh</option>
+              <option value="dandelion">Dandelion blow</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-top: 12px;" class="row">
+          <button id="blowBtn" class="btn hold">Hold to Blow</button>
+          <span class="muted">or hold <span class="kbd">Space</span> • auto-breath: <span class="kbd">A</span></span>
+        </div>
+
+        <div style="margin-top: 12px;">
+          <canvas id="scope" width="1000" height="360"></canvas>
+          <div class="footer">
+            <div class="muted">airflow (green) • turbulence energy (blue) • dandelion puffs (white)</div>
+            <div class="muted">Radio Breathing uses “stations” (randomized breath channels + articulations).</div>
+          </div>
+        </div>
+
+        <hr class="sep">
+
+        <!-- RADIO BREATHING SECTION -->
+        <div class="row space">
+          <div>
+            <h2>Radio Breathing</h2>
+            <div class="muted">Inspired by random “stations” — but each station is a random <b>breathing channel</b> + <b>articulation</b> (staccato, whisper, shhh, hiss, flutter…).</div>
+          </div>
+          <div class="row">
+            <button id="radioToggle" class="btn small">Enable Radio</button>
+            <button id="scanBtn" class="btn small primary">Scan</button>
+            <button id="lockBtn" class="btn small">Lock Station</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 10px;" class="station">
+          <div>
+            <b id="stationName">Station 00 • off-air</b>
+            <div class="sub" id="stationSub">—</div>
+          </div>
+          <div class="row">
+            <button id="talkBtn" class="btn hold small">Hold to Talk</button>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px; justify-content: space-between;">
+          <div class="row">
+            <span class="muted">Keys:</span>
+            <span class="kbd">R</span><span class="muted">toggle Radio</span>
+            <span class="kbd">S</span><span class="muted">scan</span>
+            <span class="kbd">L</span><span class="muted">lock</span>
+          </div>
+          <div class="row">
+            <label class="muted">Auto-scan</label>
+            <select id="autoscanSel" class="btn small" style="padding:8px 10px;">
+              <option value="off">off</option>
+              <option value="2">every 2s</option>
+              <option value="4">every 4s</option>
+              <option value="8">every 8s</option>
+              <option value="16">every 16s</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: controls -->
+      <div class="card">
+        <div class="kv">
+          <label>Intensity</label>
+          <div class="slider">
+            <input id="intensity" type="range" min="0" max="1" step="0.001" value="0.55"/>
+            <div class="val" id="intensityVal">0.55</div>
+          </div>
+        </div>
+        <div class="kv">
+          <label>Breath rate (Hz)</label>
+          <div class="slider">
+            <input id="rate" type="range" min="0.05" max="0.60" step="0.001" value="0.18"/>
+            <div class="val" id="rateVal">0.18</div>
+          </div>
+        </div>
+        <div class="kv">
+          <label>Obstruction</label>
+          <div class="slider">
+            <input id="obstruction" type="range" min="0" max="1" step="0.001" value="0.10"/>
+            <div class="val" id="obstructionVal">0.10</div>
+          </div>
+        </div>
+        <div class="kv">
+          <label>Turbulence chaos</label>
+          <div class="slider">
+            <input id="chaos" type="range" min="3.4" max="3.99" step="0.0005" value="3.85"/>
+            <div class="val" id="chaosVal">3.8500</div>
+          </div>
+        </div>
+        <div class="kv">
+          <label>Brightness</label>
+          <div class="slider">
+            <input id="bright" type="range" min="200" max="5000" step="1" value="1800"/>
+            <div class="val" id="brightVal">1800</div>
+          </div>
+        </div>
+        <div class="kv">
+          <label>Stereo width</label>
+          <div class="slider">
+            <input id="width" type="range" min="0" max="1" step="0.001" value="0.70"/>
+            <div class="val" id="widthVal">0.70</div>
+          </div>
+        </div>
+        <div class="kv">
+          <label>Room</label>
+          <div class="slider">
+            <input id="room" type="range" min="0" max="1" step="0.001" value="0.25"/>
+            <div class="val" id="roomVal">0.25</div>
+          </div>
+        </div>
+        <div class="kv">
+          <label>Output gain</label>
+          <div class="slider">
+            <input id="gain" type="range" min="0" max="1" step="0.001" value="0.35"/>
+            <div class="val" id="gainVal">0.35</div>
+          </div>
+        </div>
+
+        <hr class="sep">
+
+        <div class="muted">
+          <div style="margin-bottom: 8px;"><b>Radio Breathing mapping</b></div>
+          <ul style="margin: 0; padding-left: 18px;">
+            <li>Each “station” = randomized parameters + an articulation.</li>
+            <li>Articulations change envelope, filtering, and transient behavior.</li>
+            <li>Scan jumps between stations (optionally on a timer).</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  function bindRange(id, fmt = (v)=>v.toFixed(2)) {
+    const el = $(id);
+    const out = $(id + "Val");
+    const update = () => out.textContent = fmt(parseFloat(el.value));
+    el.addEventListener("input", update);
+    update();
+    return el;
+  }
+
+  const ui = {
+    startBtn: $("startBtn"),
+    stopBtn: $("stopBtn"),
+    blowBtn: $("blowBtn"),
+    presetSel: $("presetSel"),
+    audiodot: $("audiodot"),
+    audiostatus: $("audiostatus"),
+    scope: $("scope"),
+
+    // Radio
+    radioToggle: $("radioToggle"),
+    scanBtn: $("scanBtn"),
+    lockBtn: $("lockBtn"),
+    talkBtn: $("talkBtn"),
+    stationName: $("stationName"),
+    stationSub: $("stationSub"),
+    autoscanSel: $("autoscanSel"),
+
+    // Params
+    intensity: bindRange("intensity", v => v.toFixed(2)),
+    rate: bindRange("rate", v => v.toFixed(2)),
+    obstruction: bindRange("obstruction", v => v.toFixed(2)),
+    chaos: bindRange("chaos", v => v.toFixed(4)),
+    bright: bindRange("bright", v => String(Math.round(v))),
+    width: bindRange("width", v => v.toFixed(2)),
+    room: bindRange("room", v => v.toFixed(2)),
+    gain: bindRange("gain", v => v.toFixed(2)),
+  };
+
+  const PRESETS = {
+    normal:      { intensity:0.55, rate:0.18, obstruction:0.10, chaos:3.85, bright:1800, width:0.70, room:0.25, gain:0.35 },
+    obstructed:  { intensity:0.55, rate:0.16, obstruction:0.65, chaos:3.78, bright: 900, width:0.55, room:0.20, gain:0.38 },
+    panic:       { intensity:0.80, rate:0.42, obstruction:0.18, chaos:3.93, bright:2600, width:0.85, room:0.15, gain:0.33 },
+    sigh:        { intensity:0.45, rate:0.10, obstruction:0.08, chaos:3.72, bright:1300, width:0.65, room:0.35, gain:0.34 },
+    dandelion:   { intensity:0.75, rate:0.22, obstruction:0.05, chaos:3.96, bright:3200, width:0.95, room:0.30, gain:0.33 },
+  };
+  function applyPreset(name) {
+    const p = PRESETS[name] ?? PRESETS.normal;
+    ui.intensity.value = p.intensity; ui.intensity.dispatchEvent(new Event("input"));
+    ui.rate.value = p.rate; ui.rate.dispatchEvent(new Event("input"));
+    ui.obstruction.value = p.obstruction; ui.obstruction.dispatchEvent(new Event("input"));
+    ui.chaos.value = p.chaos; ui.chaos.dispatchEvent(new Event("input"));
+    ui.bright.value = p.bright; ui.bright.dispatchEvent(new Event("input"));
+    ui.width.value = p.width; ui.width.dispatchEvent(new Event("input"));
+    ui.room.value = p.room; ui.room.dispatchEvent(new Event("input"));
+    ui.gain.value = p.gain; ui.gain.dispatchEvent(new Event("input"));
+  }
+
+  // ---------- Audio ----------
+  let ac = null;
+  let rafDraw = null;
+  let isBlowing = false;
+  let autoBreath = false;
+
+  // Radio state
+  let radioEnabled = false;
+  let stationLocked = false;
+  let stationIndex = 0;
+  let currentStation = null;
+  let autoscanTimer = null;
+
+  // "Lung"
+  const lung = { p:0, q:0, drive:0, prevQ:0, radioDrive:0 };
+
+  // Logistic map
+  const chaosState = { x:0.1234567 };
+
+  // Articulation state (for transient envelope shaping)
+  const artState = { gate:0, gateVel:0, lastPulseT:0, shhh:0, whisper:0 };
+
+  // Viz
+  const viz = {
+    airflow: new Float32Array(512),
+    energy: new Float32Array(512),
+    idx: 0,
+    particles: [],
+  };
+
+  // Nodes
+  let outGain, analyser, panNode, roomMix, roomDelay, roomFb, turbNode, turbHP, breathLP, limiter;
+
+  function setAudioStatus(on) {
+    ui.audiodot.classList.toggle("on", on);
+    ui.audiostatus.textContent = on ? "audio: on" : "audio: off";
+  }
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  function smoothstep(e0, e1, x) { const t = clamp01((x - e0) / (e1 - e0)); return t*t*(3-2*t); }
+
+  function createLeafblower() {
+    outGain = ac.createGain(); outGain.gain.value = 0.0;
+
+    limiter = ac.createDynamicsCompressor();
+    limiter.threshold.value = -10;
+    limiter.knee.value = 18;
+    limiter.ratio.value = 8;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.12;
+
+    analyser = ac.createAnalyser(); analyser.fftSize = 2048;
+
+    panNode = ac.createStereoPanner(); panNode.pan.value = 0;
+
+    const bufferSize = 1024;
+    turbNode = ac.createScriptProcessor(bufferSize, 0, 1);
+
+    turbHP = ac.createBiquadFilter();
+    turbHP.type = "highpass";
+    turbHP.frequency.value = 70;
+    turbHP.Q.value = 0.7;
+
+    breathLP = ac.createBiquadFilter();
+    breathLP.type = "lowpass";
+    breathLP.frequency.value = 1800;
+    breathLP.Q.value = 0.7;
+
+    roomDelay = ac.createDelay(1.0);
+    roomDelay.delayTime.value = 0.08;
+    roomFb = ac.createGain(); roomFb.gain.value = 0.22;
+    roomMix = ac.createGain(); roomMix.gain.value = 0.0;
+
+    turbNode.connect(turbHP);
+    turbHP.connect(breathLP);
+    breathLP.connect(panNode);
+    panNode.connect(outGain);
+
+    // room send
+    panNode.connect(roomDelay);
+    roomDelay.connect(roomFb);
+    roomFb.connect(roomDelay);
+    roomDelay.connect(roomMix);
+    roomMix.connect(outGain);
+
+    outGain.connect(limiter);
+    limiter.connect(analyser);
+    analyser.connect(ac.destination);
+
+    turbNode.onaudioprocess = (e) => {
+      const out = e.outputBuffer.getChannelData(0);
+
+      // Base params from UI, but if Radio is enabled + not locked, station may override
+      let base = readUIParams();
+      if (radioEnabled && currentStation) base = blendParams(base, currentStation.params, 0.85);
+
+      const intensity = base.intensity;
+      const obstruction = base.obstruction;
+      const r = base.chaos;
+
+      let x = chaosState.x;
+      let p = lung.p;
+      let q = lung.q;
+      let prevQ = lung.prevQ;
+
+      // articulation shaping
+      const art = radioEnabled && currentStation ? currentStation.art : "none";
+
+      for (let i = 0; i < out.length; i++) {
+        const drive = lung.drive;
+
+        // Compartment-ish dynamics
+        const R = 0.35 + 2.8 * obstruction;
+        const I = 0.015 + 0.04 * obstruction;
+        const leak = 0.08;
+
+        p += (drive - leak * p) * (1 / ac.sampleRate);
+        q += ((p - R * q) / Math.max(1e-4, I)) * (1 / ac.sampleRate);
+
+        const airflow = Math.tanh(Math.abs(q) * (1.5 + 3.0 * intensity));
+        const dQ = q - prevQ;
+        prevQ = q;
+
+        // Logistic map turbulence
+        x = r * x * (1 - x);
+        let turb = (x - 0.5) * 2.0;
+        turb = Math.tanh(turb * (1.8 + 2.5 * intensity));
+
+        // Obstruction flutter
+        const flutter = obstruction * Math.tanh(8 * dQ);
+
+        // Articulation envelope
+        const artEnv = articulationEnvelope(art, airflow, dQ);
+
+        const amp = (0.010 + 0.34 * airflow * airflow) * artEnv;
+
+        // Some articulations add extra “shhh” high component
+        const sh = artState.shhh;
+        const wh = artState.whisper;
+
+        // combine
+        out[i] = amp * (turb + 0.45 * flutter) + (0.004 + 0.010*intensity) * sh + (0.003 + 0.008*intensity) * wh;
+
+        // Viz + particle puffs
+        if ((i & 7) === 0) {
+          viz.airflow[viz.idx] = airflow;
+          viz.energy[viz.idx] = Math.min(1, Math.abs(out[i]) * 8);
+          viz.idx = (viz.idx + 1) & (viz.airflow.length - 1);
+
+          const accel = Math.abs(dQ) * 25;
+          if (airflow > 0.55 && accel > 0.22) spawnParticles(airflow, accel);
+        }
+      }
+
+      chaosState.x = x;
+      lung.p = p;
+      lung.q = q;
+      lung.prevQ = prevQ;
+    };
+  }
+
+  function readUIParams() {
+    return {
+      intensity: parseFloat(ui.intensity.value),
+      rate: parseFloat(ui.rate.value),
+      obstruction: parseFloat(ui.obstruction.value),
+      chaos: parseFloat(ui.chaos.value),
+      bright: parseFloat(ui.bright.value),
+      width: parseFloat(ui.width.value),
+      room: parseFloat(ui.room.value),
+      gain: parseFloat(ui.gain.value),
+    };
+  }
+  function blendParams(a, b, t) {
+    const lerp = (x,y)=>x + (y-x)*t;
+    return {
+      intensity: lerp(a.intensity, b.intensity),
+      rate: lerp(a.rate, b.rate),
+      obstruction: lerp(a.obstruction, b.obstruction),
+      chaos: lerp(a.chaos, b.chaos),
+      bright: lerp(a.bright, b.bright),
+      width: lerp(a.width, b.width),
+      room: lerp(a.room, b.room),
+      gain: lerp(a.gain, b.gain),
+    };
+  }
+
+  // ---------- Articulations ----------
+  const ARTICULATIONS = [
+    "none",
+    "staccato",
+    "whisper",
+    "shhh",
+    "hiss",
+    "flutter",
+    "crackle",
+  ];
+
+  function articulationEnvelope(kind, airflow, dQ) {
+    const t = ac.currentTime;
+    // base envelope is airflow
+    let env = 0.55 + 0.75 * airflow;
+
+    // reset helpers
+    artState.shhh *= 0.98;
+    artState.whisper *= 0.985;
+
+    if (kind === "none") return env;
+
+    if (kind === "staccato") {
+      // gated puffs while blowing
+      const bpm = 240;
+      const hz = bpm/60;
+      const ph = (t * hz) % 1;
+      const g = smoothstep(0.02, 0.08, ph) * (1 - smoothstep(0.18, 0.30, ph));
+      env *= (0.18 + 1.25 * g);
+      return env;
+    }
+
+    if (kind === "whisper") {
+      // softer fundamental, more airy noise (handled by whisper term)
+      env *= 0.65;
+      artState.whisper = Math.min(1, artState.whisper + 0.06 * airflow);
+      return env;
+    }
+
+    if (kind === "shhh") {
+      // sustained high-air component (handled by shhh term)
+      env *= 0.70;
+      artState.shhh = Math.min(1, artState.shhh + 0.08 * airflow);
+      return env;
+    }
+
+    if (kind === "hiss") {
+      // brighter, steady, slightly compressed
+      env *= 0.85 + 0.25 * airflow;
+      artState.shhh = Math.min(1, artState.shhh + 0.05 * airflow);
+      return env;
+    }
+
+    if (kind === "flutter") {
+      // amplitude flutter tied to airflow derivative
+      const fl = Math.tanh(Math.abs(dQ) * 15);
+      env *= (0.65 + 0.75 * fl);
+      return env;
+    }
+
+    if (kind === "crackle") {
+      // random transient gating: like radio static bursts
+      // Use chaosState.x as a proxy random; burst when x crosses a threshold
+      const burst = (chaosState.x > 0.92) ? 1 : 0;
+      env *= (0.50 + 1.35 * burst);
+      return env;
+    }
+
+    return env;
+  }
+
+  // ---------- Breath control ----------
+  function setBlow(active) {
+    isBlowing = active;
+    ui.blowBtn.classList.toggle("active", active);
+  }
+  function setTalk(active) {
+    ui.talkBtn.classList.toggle("active", active);
+    // talk drives radioDrive, which blends into lung.drive
+    lung.radioDrive = active ? 1.0 : 0.0;
+  }
+
+  function updateDrive(dt) {
+    // Base target from Leafblower’s manual/auto
+    const rateHz = parseFloat(ui.rate.value);
+
+    let target = 0.0;
+    if (autoBreath) {
+      const t = ac ? ac.currentTime : 0;
+      const phase = (t * rateHz) % 1.0;
+      const exhale = smoothstep(0.05, 0.55, phase) * (1 - smoothstep(0.55, 0.95, phase));
+      const jitter = 0.03 * Math.sin(2 * Math.PI * (t * (rateHz * 6.0 + 0.3)));
+      target = clamp01(exhale + jitter);
+    } else {
+      target = isBlowing ? 1.0 : 0.0;
+    }
+
+    // If Radio enabled, add “broadcast” drive (talk button) OR a station auto-drive if not talking
+    let radioTarget = 0.0;
+    if (radioEnabled && currentStation) {
+      if (lung.radioDrive > 0.01) {
+        radioTarget = 1.0;
+      } else {
+        // station-driven breath pattern
+        const t = ac.currentTime;
+        const hz = currentStation.params.rate;
+        const phase = (t * hz) % 1.0;
+        const exhale = smoothstep(0.04, 0.52, phase) * (1 - smoothstep(0.52, 0.96, phase));
+        radioTarget = clamp01(exhale * (0.65 + 0.55 * currentStation.params.intensity));
+      }
+    }
+
+    // Blend: when radio is enabled, it “takes over” unless you’re using the main Blow button.
+    const radioMix = radioEnabled ? (isBlowing ? 0.25 : 0.95) : 0.0;
+    const blended = (1 - radioMix) * target + radioMix * radioTarget;
+
+    // Smooth
+    const attack = 0.020;
+    const release = 0.090;
+    const tau = (blended > lung.drive) ? attack : release;
+    const a = 1 - Math.exp(-dt / Math.max(1e-4, tau));
+    lung.drive += a * (blended - lung.drive);
+  }
+
+  // ---------- Parameter mapping ----------
+  function applyParamMapping() {
+    if (!ac) return;
+
+    // Start from UI, but Radio station can override a lot
+    let base = readUIParams();
+    if (radioEnabled && currentStation) base = blendParams(base, currentStation.params, 0.85);
+
+    const intensity = base.intensity;
+    const obstruction = base.obstruction;
+    const bright = base.bright;
+    const width = base.width;
+    const room = base.room;
+    const master = base.gain;
+
+    const airflow = Math.tanh(Math.abs(lung.q) * (1.0 + 4.0 * intensity));
+    const loud = (0.02 + 0.98 * airflow) ** 2;
+
+    outGain.gain.setTargetAtTime(master * (0.15 + 0.85 * loud), ac.currentTime, 0.015);
+
+    // Filter cutoff
+    const cutoff = bright * (0.30 + 0.70 * airflow) * (1.0 - 0.55 * obstruction);
+    breathLP.frequency.setTargetAtTime(Math.max(250, Math.min(9000, cutoff)), ac.currentTime, 0.02);
+    breathLP.Q.setTargetAtTime(0.65 + 5.0 * obstruction, ac.currentTime, 0.04);
+
+    // Pan
+    const jitter = (chaosState.x - 0.5) * 0.35;
+    const pan = clamp01(0.5 + 0.5 * (width * (airflow * 2 - 1) + jitter)) * 2 - 1;
+    panNode.pan.setTargetAtTime(pan, ac.currentTime, 0.03);
+
+    // Room
+    roomMix.gain.setTargetAtTime(room * (0.15 + 0.85 * loud), ac.currentTime, 0.05);
+    roomDelay.delayTime.setTargetAtTime(0.05 + 0.08 * room, ac.currentTime, 0.05);
+    roomFb.gain.setTargetAtTime(0.12 + 0.35 * room, ac.currentTime, 0.08);
+
+    // HP moves with obstruction a bit (tight airway → higher cutoff)
+    turbHP.frequency.setTargetAtTime(60 + 220 * obstruction, ac.currentTime, 0.05);
+  }
+
+  // ---------- Visualization ----------
+  const ctx2d = ui.scope.getContext("2d");
+  function spawnParticles(airflow, accel) {
+    const n = Math.min(12, 2 + Math.floor(airflow * 8 + accel * 10));
+    const baseSpeed = 30 + airflow * 220;
+    for (let i = 0; i < n; i++) {
+      viz.particles.push({
+        x: 0.12 + Math.random() * 0.02,
+        y: 0.62 + (Math.random() - 0.5) * 0.08,
+        vx: (baseSpeed * (0.8 + 0.4 * Math.random())) / 1000,
+        vy: ((Math.random() - 0.5) * 60) / 1000,
+        life: 0.9 + Math.random() * 0.6,
+        r: 1.0 + Math.random() * 2.2
+      });
+    }
+    if (viz.particles.length > 250) viz.particles.splice(0, viz.particles.length - 250);
+  }
+  function draw() {
+    const W = ui.scope.width, H = ui.scope.height;
+    ctx2d.clearRect(0, 0, W, H);
+    ctx2d.fillStyle = "rgba(0,0,0,0.18)";
+    ctx2d.fillRect(0, 0, W, H);
+
+    ctx2d.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx2d.lineWidth = 1;
+    for (let k = 1; k <= 3; k++) {
+      const y = (H * k) / 4;
+      ctx2d.beginPath(); ctx2d.moveTo(0, y); ctx2d.lineTo(W, y); ctx2d.stroke();
+    }
+
+    function plot(buf, color, yMid, scale) {
+      ctx2d.strokeStyle = color;
+      ctx2d.lineWidth = 2;
+      ctx2d.beginPath();
+      const N = buf.length;
+      for (let i = 0; i < N; i++) {
+        const idx = (viz.idx + i) & (N - 1);
+        const x = (i / (N - 1)) * W;
+        const y = yMid - buf[idx] * scale;
+        if (i === 0) ctx2d.moveTo(x, y); else ctx2d.lineTo(x, y);
+      }
+      ctx2d.stroke();
+    }
+
+    plot(viz.airflow, "rgba(52,211,153,0.85)", H * 0.40, H * 0.28);
+    plot(viz.energy, "rgba(125,211,252,0.85)", H * 0.78, H * 0.22);
+
+    // dandelion head
+    ctx2d.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx2d.lineWidth = 2;
+    ctx2d.beginPath();
+    ctx2d.arc(W * 0.12, H * 0.62, 22, 0, Math.PI * 2);
+    ctx2d.stroke();
+
+    // particles
+    ctx2d.fillStyle = "rgba(255,255,255,0.90)";
+    const dt = 1/60;
+    for (let i = viz.particles.length - 1; i >= 0; i--) {
+      const p = viz.particles[i];
+      p.x += p.vx; p.y += p.vy;
+      p.vy += 0.00008;
+      p.vx *= 0.995; p.vy *= 0.997;
+      p.life -= dt;
+
+      const x = p.x * W, y = p.y * H;
+      const a = Math.max(0, Math.min(1, p.life));
+      ctx2d.globalAlpha = a * 0.9;
+      ctx2d.beginPath();
+      ctx2d.arc(x, y, p.r, 0, Math.PI * 2);
+      ctx2d.fill();
+
+      if (p.life <= 0 || x > W + 20 || y < -20 || y > H + 20) viz.particles.splice(i, 1);
+    }
+    ctx2d.globalAlpha = 1.0;
+
+    // labels + station
+    ctx2d.fillStyle = "rgba(255,255,255,0.75)";
+    ctx2d.font = "14px ui-sans-serif, system-ui, -apple-system";
+    ctx2d.fillText("airflow", 14, 22);
+    ctx2d.fillText("turbulence energy", 14, H*0.55);
+
+    if (radioEnabled && currentStation) {
+      ctx2d.fillStyle = "rgba(255,255,255,0.70)";
+      ctx2d.font = "12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas";
+      ctx2d.fillText(`RADIO • ${currentStation.name} • art=${currentStation.art}${stationLocked ? " • LOCK" : ""}`, 14, H - 14);
+    }
+
+    rafDraw = requestAnimationFrame(draw);
+  }
+
+  // ---------- Loop ----------
+  let lastT = null;
+  function tick(tms) {
+    const t = tms / 1000;
+    if (lastT == null) lastT = t;
+    const dt = Math.min(0.05, t - lastT);
+    lastT = t;
+
+    if (ac) {
+      updateDrive(dt);
+      applyParamMapping();
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- Start/stop ----------
+  async function startAudio() {
+    if (ac && ac.state !== "closed") { await ac.resume(); setAudioStatus(true); return; }
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    createLeafblower();
+    setAudioStatus(true);
+
+    if (!rafDraw) rafDraw = requestAnimationFrame(draw);
+    requestAnimationFrame(tick);
+
+    applyPreset(ui.presetSel.value);
+    await ac.resume();
+  }
+  async function stopAudio() {
+    setBlow(false);
+    autoBreath = false;
+    setTalk(false);
+    disableAutoscan();
+
+    if (rafDraw) { cancelAnimationFrame(rafDraw); rafDraw = null; }
+    lastT = null;
+
+    if (ac && ac.state !== "closed") { try { await ac.close(); } catch (_) {} }
+    ac = null;
+    setAudioStatus(false);
+  }
+
+  // ---------- Radio Breathing ----------
+  function rngFromSeed(seed) {
+    // mulberry32
+    let a = seed >>> 0;
+    return () => {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function randomStation(seed) {
+    const rnd = rngFromSeed(seed);
+    const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+
+    const art = pick(ARTICULATIONS.filter(a => a !== "none"));
+    const names = ["WIND", "LUNG", "STATIC", "GASP", "SILK", "DUST", "TIDE", "CLOUD", "RATTLE", "WHISPER"];
+    const name = `${pick(names)}-${String(Math.floor(rnd()*99)).padStart(2,"0")}`;
+
+    // Station parameter ranges — designed to feel “channelized”
+    const params = {
+      intensity: 0.25 + rnd()*0.75,
+      rate:      0.08 + rnd()*0.55,
+      obstruction: rnd()*0.80,
+      chaos:     3.55 + rnd()*0.42,
+      bright:    500 + rnd()*4200,
+      width:     rnd(),
+      room:      rnd()*0.70,
+      gain:      0.22 + rnd()*0.28,
+    };
+
+    // Articulation biases
+    if (art === "whisper") { params.bright = Math.max(1200, params.bright); params.intensity *= 0.85; params.obstruction *= 0.5; }
+    if (art === "shhh" || art === "hiss") { params.bright = Math.min(5000, params.bright * 1.2); params.chaos = Math.min(3.99, params.chaos + 0.04); }
+    if (art === "flutter") { params.obstruction = Math.min(1, params.obstruction + 0.15); }
+    if (art === "staccato") { params.rate = Math.min(0.60, params.rate + 0.08); }
+    if (art === "crackle") { params.chaos = Math.min(3.99, params.chaos + 0.08); params.room = Math.min(1, params.room + 0.15); }
+
+    return {
+      seed,
+      name: `Station ${String(stationIndex).padStart(2,"0")} • ${name}`,
+      art,
+      params
+    };
+  }
+
+  function setStation(s) {
+    currentStation = s;
+    ui.stationName.textContent = s ? s.name : "Station 00 • off-air";
+    if (!s) { ui.stationSub.textContent = "—"; return; }
+    ui.stationSub.textContent =
+      `articulation: ${s.art} • chaos=${s.params.chaos.toFixed(3)} • obs=${s.params.obstruction.toFixed(2)} • bright=${Math.round(s.params.bright)} • rate=${s.params.rate.toFixed(2)}Hz`;
+  }
+
+  function scanStation() {
+    if (!radioEnabled) return;
+    if (stationLocked && currentStation) return;
+
+    stationIndex = (stationIndex + 1) % 100;
+    const seed = (Date.now() + stationIndex * 1337) & 0xffffffff;
+    setStation(randomStation(seed));
+  }
+
+  function enableRadio(on) {
+    radioEnabled = on;
+    ui.radioToggle.textContent = on ? "Disable Radio" : "Enable Radio";
+    ui.radioToggle.classList.toggle("primary", on);
+    if (on) {
+      // create first station if needed
+      if (!currentStation) { stationIndex = 1; setStation(randomStation(Date.now() & 0xffffffff)); }
+    } else {
+      setTalk(false);
+    }
+  }
+
+  function toggleLock() {
+    stationLocked = !stationLocked;
+    ui.lockBtn.textContent = stationLocked ? "Unlock Station" : "Lock Station";
+    ui.lockBtn.classList.toggle("primary", stationLocked);
+  }
+
+  function enableAutoscan(seconds) {
+    disableAutoscan();
+    autoscanTimer = setInterval(() => scanStation(), Math.max(250, seconds*1000));
+  }
+  function disableAutoscan() {
+    if (autoscanTimer) { clearInterval(autoscanTimer); autoscanTimer = null; }
+  }
+
+  // ---------- UI events ----------
+  ui.startBtn.addEventListener("click", startAudio);
+  ui.stopBtn.addEventListener("click", stopAudio);
+  ui.presetSel.addEventListener("change", (e) => applyPreset(e.target.value));
+
+  ui.blowBtn.addEventListener("pointerdown", async (e) => {
+    e.preventDefault();
+    await startAudio();
+    autoBreath = false;
+    setBlow(true);
+  });
+  window.addEventListener("pointerup", () => setBlow(false));
+  window.addEventListener("pointercancel", () => setBlow(false));
+
+  // Radio buttons
+  ui.radioToggle.addEventListener("click", async () => { await startAudio(); enableRadio(!radioEnabled); });
+  ui.scanBtn.addEventListener("click", async () => { await startAudio(); scanStation(); });
+  ui.lockBtn.addEventListener("click", () => toggleLock());
+
+  ui.talkBtn.addEventListener("pointerdown", async (e) => {
+    e.preventDefault();
+    await startAudio();
+    enableRadio(true);
+    setTalk(true);
+  });
+  window.addEventListener("pointerup", () => setTalk(false));
+  window.addEventListener("pointercancel", () => setTalk(false));
+
+  ui.autoscanSel.addEventListener("change", () => {
+    const v = ui.autoscanSel.value;
+    if (v === "off") disableAutoscan();
+    else enableAutoscan(parseFloat(v));
+  });
+
+  // Keyboard
+  window.addEventListener("keydown", async (e) => {
+    if (e.repeat) return;
+
+    if (e.code === "Space") {
+      e.preventDefault();
+      await startAudio();
+      autoBreath = false;
+      setBlow(true);
+    }
+    const k = e.key.toLowerCase();
+    if (k === "a") { await startAudio(); autoBreath = !autoBreath; setBlow(false); }
+    if (k === "r") { await startAudio(); enableRadio(!radioEnabled); }
+    if (k === "s") { await startAudio(); scanStation(); }
+    if (k === "l") { toggleLock(); }
+  });
+  window.addEventListener("keyup", (e) => {
+    if (e.code === "Space") { e.preventDefault(); setBlow(false); }
+  });
+
+  // ---------- Preset init ----------
+  function init() {
+    applyPreset("normal");
+    setStation(null);
+  }
+  init();
+})();
+</script>
+</body>
+</html>
