@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PNEUMA - Breath Sonification</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050505;
+            color: #ffffff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #ui-container {
+            z-index: 10;
+            text-align: center;
+        }
+        h1 {
+            font-size: 1.5rem;
+            letter-spacing: 0.2em;
+            opacity: 0.7;
+        }
+        p {
+            font-size: 0.9rem;
+            opacity: 0.5;
+            max-width: 400px;
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px 30px;
+            font-size: 1rem;
+            background: transparent;
+            color: white;
+            border: 1px solid rgba(255,255,255,0.5);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            letter-spacing: 0.1em;
+        }
+        button:hover {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid white;
+        }
+        /* 视觉反馈：呼吸光晕 */
+        #visualizer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: white;
+            box-shadow: 0 0 20px 10px rgba(255,255,255,0);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="visualizer"></div>
+
+    <div id="ui-container">
+        <h1>PNEUMA</h1>
+        <p>A generative NMP drone driven by respiratory envelopes. <br><br>Exhale into the microphone to modulate the synthesis.</p>
+        <button id="start-btn">INITIATE AUDIO</button>
+    </div>
+
+    <script>
+        let audioContext;
+        let micSource;
+        let analyser;
+        let breathFilter;
+        let dataArray;
+        
+        // 合成器节点
+        let droneOsc1, droneOsc2;
+        let droneFilter;
+        let masterGain;
+
+        let smoothedVolume = 0; 
+        let isRunning = false;
+
+        const startBtn = document.getElementById('start-btn');
+        const visualizer = document.getElementById('visualizer');
+        const uiContainer = document.getElementById('ui-container');
+
+        startBtn.addEventListener('click', async () => {
+            if (isRunning) return;
+            
+            // 1. 初始化 Web Audio API (必须由用户点击触发)
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            try {
+                // 2. 获取麦克风权限
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                micSource = audioContext.createMediaStreamSource(stream);
+
+                // 3. 建立输入端处理 (过滤掉低频轰鸣和高频刺耳声，只留呼吸频段)
+                breathFilter = audioContext.createBiquadFilter();
+                breathFilter.type = 'bandpass';
+                breathFilter.frequency.value = 600; // 呼吸声中心频率
+                breathFilter.Q.value = 0.5;
+
+                // 4. 分析器 (提取包络)
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 512;
+                dataArray = new Float32Array(analyser.fftSize);
+
+                micSource.connect(breathFilter);
+                breathFilter.connect(analyser);
+
+                // 5. 建立合成器端 (深沉的 Drone)
+                setupDrone();
+
+                // 隐藏 UI，开始循环
+                uiContainer.style.opacity = '0.1';
+                startBtn.innerText = "LISTENING...";
+                isRunning = true;
+                drawLoop();
+
+            } catch (err) {
+                console.error("Mic access denied or error:", err);
+                alert("Needs microphone access to work!");
+            }
+        });
+
+        function setupDrone() {
+            // 两个稍微走音的低频振荡器产生浑厚的 Bass
+            droneOsc1 = audioContext.createOscillator();
+            droneOsc1.type = 'sawtooth';
+            droneOsc1.frequency.value = 55; // A1 
+
+            droneOsc2 = audioContext.createOscillator();
+            droneOsc2.type = 'square';
+            droneOsc2.frequency.value = 54.5; // 稍微 Detune 产生 beating 效果
+
+            // Drone 的低通滤波器
+            droneFilter = audioContext.createBiquadFilter();
+            droneFilter.type = 'lowpass';
+            droneFilter.frequency.value = 100; // 初始很暗
+
+            // 主音量
+            masterGain = audioContext.createGain();
+            masterGain.gain.value = 0; // 初始无声
+
+            droneOsc1.connect(droneFilter);
+            droneOsc2.connect(droneFilter);
+            droneFilter.connect(masterGain);
+            masterGain.connect(audioContext.destination);
+
+            droneOsc1.start();
+            droneOsc2.start();
+        }
+
+        function drawLoop() {
+            requestAnimationFrame(drawLoop);
+
+            // 获取时间域的音频数据
+            analyser.getFloatTimeDomainData(dataArray);
+
+            // 计算 RMS (均方根)，这就是当前的“音量/包络”
+            let sumSquares = 0.0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sumSquares += dataArray[i] * dataArray[i];
+            }
+            let rms = Math.sqrt(sumSquares / dataArray.length);
+
+            // 放大 RMS 信号 (对着电脑麦克风吹气通常信号较弱)
+            let rawVolume = rms * 15; 
+            if (rawVolume > 1) rawVolume = 1;
+
+            // 平滑处理包络 (Low-pass filter for the control signal)，避免声音闪烁
+            smoothedVolume = (smoothedVolume * 0.9) + (rawVolume * 0.1);
+
+            // --- 映射 (Mapping) ---
+            
+            // 1. 听觉映射：呼吸越重，Filter 打开越大，声音越响亮
+            // Cutoff 从 100Hz 变到 2000Hz
+            const minCutoff = 100;
+            const maxCutoff = 2000;
+            droneFilter.frequency.setTargetAtTime(minCutoff + (smoothedVolume * maxCutoff), audioContext.currentTime, 0.05);
+            
+            // 音量从 0 变到 0.8
+            masterGain.gain.setTargetAtTime(smoothedVolume * 0.8, audioContext.currentTime, 0.05);
+
+            // 2. 视觉映射：呼吸越重，中间的圆圈越大越亮
+            const scale = 1 + (smoothedVolume * 40); // 放大倍数
+            const opacity = smoothedVolume;
+            
+            visualizer.style.transform = `translate(-50%, -50%) scale(${scale})`;
+            visualizer.style.opacity = opacity;
+            visualizer.style.boxShadow = `0 0 ${20 + smoothedVolume * 50}px ${10 + smoothedVolume * 20}px rgba(255,255,255,${smoothedVolume})`;
+        }
+    </script>
+</body>
+</html>
